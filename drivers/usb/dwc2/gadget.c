@@ -106,6 +106,8 @@ static inline bool using_desc_dma(struct dwc2_hsotg *hsotg)
 	return hsotg->params.g_dma_desc;
 }
 
+static u32 dwc2_hsotg_read_frameno(struct dwc2_hsotg *hsotg);
+
 /**
  * dwc2_gadget_incr_frame_num - Increments the targeted frame number.
  * @hs_ep: The endpoint
@@ -117,6 +119,7 @@ static inline void dwc2_gadget_incr_frame_num(struct dwc2_hsotg_ep *hs_ep)
 {
 	struct dwc2_hsotg *hsotg = hs_ep->parent;
 	u16 limit = DSTS_SOFFN_LIMIT;
+	u32 current_frame = dwc2_hsotg_read_frameno(hsotg);
 
 	if (hsotg->gadget.speed != USB_SPEED_HIGH)
 		limit >>= 3;
@@ -125,7 +128,7 @@ static inline void dwc2_gadget_incr_frame_num(struct dwc2_hsotg_ep *hs_ep)
 	if (hs_ep->target_frame > limit) {
 		hs_ep->frame_overrun = true;
 		hs_ep->target_frame &= limit;
-	} else {
+	} else if (current_frame <= hs_ep->target_frame) {
 		hs_ep->frame_overrun = false;
 	}
 }
