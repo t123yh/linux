@@ -77,6 +77,10 @@
 	};
 };
 
+&ehci0 {
+	status = "okay";
+};
+
 &mmc0 {
 	broken-cd;
 	bus-width = <4>;
@@ -91,6 +95,10 @@
 		compatible = "nsiway,ns2009";
 		reg = <0x48>;
 	};
+};
+
+&ohci0 {
+	status = "okay";
 };
 
 &uart0 {
