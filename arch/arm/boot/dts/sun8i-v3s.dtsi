@@ -357,7 +357,7 @@
 				       "PE6", "PE7", "PE8", "PE9", "PE10", "PE11",
 				       "PE12", "PE13", "PE14", "PE15", "PE16", "PE17",
 				       "PE18", "PE19", "PE23", "PE24";
-				function = "lcd0";
+				function = "lcd";
 			};
 
 			mmc0_pins: mmc0-pins {
