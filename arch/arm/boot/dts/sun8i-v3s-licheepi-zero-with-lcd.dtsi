@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: (GPL-2.0+ OR X11)
  */
 
- #include "sun8i-v3s-licheepi-zero.dts"
+#include "sun8i-v3s-licheepi-zero.dts"
 
  / {
 	backlight: backlight {
@@ -14,17 +14,17 @@
 		default-brightness-level = <6>;
 	};
 
- 	panel: panel {
+	panel: panel {
 		#address-cells = <1>;
 		#size-cells = <0>;
 
- 		port@0 {
+		port@0 {
 			reg = <0>;
 			backlight = <&backlight>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 
- 			panel_input: endpoint@0 {
+			panel_input: endpoint@0 {
 				reg = <0>;
 				remote-endpoint = <&tcon0_out_lcd>;
 			};
@@ -32,17 +32,23 @@
 	};
 };
 
- &de {
+&de {
 	status = "okay";
 };
 
- &tcon0 {
+&pwm {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pwm0_pins>;
+	status = "okay";
+};
+
+&tcon0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&lcd_rgb666_pins_a>;
 	status = "okay";
 };
 
- &tcon0_out {
+&tcon0_out {
 	tcon0_out_lcd: endpoint@0 {
 		reg = <0>;
 		remote-endpoint = <&panel_input>;
