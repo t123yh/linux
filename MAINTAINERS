@@ -11551,6 +11551,12 @@ S:	Maintained
 F:	scripts/nsdeps
 F:	Documentation/core-api/symbol-namespaces.rst
 
+NSIWAY NS2009 TOUCHSCREEN CONTROLLER
+M:	Icenowy Zheng <icenowy@aosc.xyz>
+L:	linux-input@vger.kernel.org
+S:	Maintained
+F:	drivers/input/touchscreen/ns2009.c
+
 NTB AMD DRIVER
 M:	Shyam Sundar S K <Shyam-sundar.S-k@amd.com>
 L:	linux-ntb@googlegroups.com
