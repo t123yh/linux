@@ -72,6 +72,13 @@
 	status = "okay";
 };
 
+&mmc0 {
+	broken-cd;
+	bus-width = <4>;
+	vmmc-supply = <&reg_vcc3v3>;
+	status = "okay";
+};
+
 &mmc1 {
 	broken-cd;
 	bus-width = <4>;
@@ -110,4 +117,17 @@
 		channel = <0>;
 		voltage = <800000>;
 	};
+};
+
+&i2c0 {
+	gt911: touchscreen@14 {
+        compatible = "goodix,gt911";
+        reg = <0x14>;
+        interrupt-parent = <&pio>;
+        interrupts = <1 5 IRQ_TYPE_EDGE_FALLING>; /* (PB5) */
+        pinctrl-names = "default";
+        irq-gpios = <&pio 1 5 GPIO_ACTIVE_HIGH>; /* (PB5) */
+        reset-gpios = <&pio 2 1 GPIO_ACTIVE_HIGH>; /* RST (PC1) */
+        /* touchscreen-swapped-x-y */
+    };
 };
