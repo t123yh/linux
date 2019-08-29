@@ -69,13 +69,9 @@
 };
 
 &emac {
-	status = "okay";
-};
-
-&mmc0 {
-	broken-cd;
-	bus-width = <4>;
-	vmmc-supply = <&reg_vcc3v3>;
+	phy-handle = <&int_mii_phy>;
+	phy-mode = "mii";
+	allwinner,leds-active-low;
 	status = "okay";
 };
 
@@ -122,7 +118,7 @@
 &i2c0 {
 	gt911: touchscreen@14 {
         compatible = "goodix,gt911";
-        reg = <0x14>;
+        reg = <0x5d>;
         interrupt-parent = <&pio>;
         interrupts = <1 5 IRQ_TYPE_EDGE_FALLING>; /* (PB5) */
         pinctrl-names = "default";
