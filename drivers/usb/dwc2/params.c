@@ -93,6 +93,7 @@ static void dwc2_set_rk_params(struct dwc2_hsotg *hsotg)
 	p->power_down = DWC2_POWER_DOWN_PARAM_NONE;
 	p->lpm = false;
 	p->no_clock_gating = true;
+	p->g_dma_desc = false;
 }
 
 static void dwc2_set_ltq_params(struct dwc2_hsotg *hsotg)
