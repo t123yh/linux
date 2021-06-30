@@ -119,6 +119,12 @@ static inline int si5351_set_bits(struct si5351_driver_data *drvdata,
 	return regmap_update_bits(drvdata->regmap, reg, mask, val);
 }
 
+static inline int si5351_force_set_bits(struct si5351_driver_data *drvdata,
+				  u8 reg, u8 mask, u8 val)
+{
+	return regmap_write_bits(drvdata->regmap, reg, mask, val);
+}
+
 static inline u8 si5351_msynth_params_address(int num)
 {
 	if (num > 5)
@@ -1093,6 +1099,10 @@ static int si5351_clkout_set_rate(struct clk_hw *hw, unsigned long rate,
 	unsigned long new_rate, new_err, err;
 	unsigned char rdiv;
 
+	/* shutdown clkout */
+	si5351_force_set_bits(hwdata->drvdata, SI5351_CLK0_CTRL + hwdata->num,
+			SI5351_CLK_POWERDOWN, SI5351_CLK_POWERDOWN);
+
 	/* round to closed rdiv */
 	rdiv = SI5351_OUTPUT_CLK_DIV_1;
 	new_rate = parent_rate;
@@ -1125,7 +1135,7 @@ static int si5351_clkout_set_rate(struct clk_hw *hw, unsigned long rate,
 	}
 
 	/* powerup clkout */
-	si5351_set_bits(hwdata->drvdata, SI5351_CLK0_CTRL + hwdata->num,
+	si5351_force_set_bits(hwdata->drvdata, SI5351_CLK0_CTRL + hwdata->num,
 			SI5351_CLK_POWERDOWN, 0);
 
 	dev_dbg(&hwdata->drvdata->client->dev,
