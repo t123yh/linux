@@ -839,6 +839,30 @@ static int _si5351_clkout_reparent(struct si5351_driver_data *drvdata,
 	return 0;
 }
 
+static int _si5351_set_xtal_load_cap(
+	struct si5351_driver_data *drvdata,
+	enum si5351_xtal_load_cap cap)
+{
+	u8 val;
+	switch (cap) {
+	case SI5351_XTAL_LOAD_6PF:
+		val = SI5351_CRYSTAL_LOAD_6PF;
+		break;
+	case SI5351_XTAL_LOAD_8PF:
+		val = SI5351_CRYSTAL_LOAD_8PF;
+		break;
+	case SI5351_XTAL_LOAD_10PF:
+		val = SI5351_CRYSTAL_LOAD_10PF;
+		break;
+	case SI5351_XTAL_LOAD_DEFAULT:
+		return 0;
+	default:
+		return -EINVAL;
+	}
+
+	return si5351_reg_write(drvdata, SI5351_CRYSTAL_LOAD, val | 0b010010);
+}
+
 static int _si5351_clkout_set_drive_strength(
 	struct si5351_driver_data *drvdata, int num,
 	enum si5351_drive_strength drive)
@@ -1187,6 +1211,20 @@ static int si5351_dt_parse(struct i2c_client *client,
 	if (!pdata)
 		return -ENOMEM;
 
+	if (!of_property_read_u32(np, "silabs,xtal-load-cap", &val)) {
+		switch(val) {
+			case SI5351_XTAL_LOAD_6PF:
+			case SI5351_XTAL_LOAD_8PF:
+			case SI5351_XTAL_LOAD_10PF:
+				pdata->xtal_load = val;
+				break;
+			default:
+				dev_err(&client->dev,
+					"invalid load capacitance %d for crystal\n", val);
+				return -EINVAL;
+		}
+	}
+
 	/*
 	 * property silabs,pll-source : <num src>, [<..>]
 	 * allow to selectively set pll source
@@ -1424,6 +1462,13 @@ static int si5351_i2c_probe(struct i2c_client *client,
 	if (IS_ERR(drvdata->regmap)) {
 		dev_err(&client->dev, "failed to allocate register map\n");
 		return PTR_ERR(drvdata->regmap);
+	}
+
+	ret = _si5351_set_xtal_load_cap(drvdata, pdata->xtal_load);
+	if (ret) {
+		dev_err(&client->dev,
+			"failed to set load cap to %d\n", pdata->xtal_load);
+		return ret;
 	}
 
 	/* Disable interrupts */

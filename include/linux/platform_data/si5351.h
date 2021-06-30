@@ -81,6 +81,20 @@ enum si5351_disable_state {
 };
 
 /**
+ * enum si5351_xtal_load_cap - Si5351 Crystal Load Capacitance
+ * @SI5351_XTAL_LOAD_DEFAULT: default, do not change eeprom config
+ * @SI5351_XTAL_LOAD_6PF: 6pF internal load
+ * @SI5351_XTAL_LOAD_8PF: 8pF internal load
+ * @SI5351_XTAL_LOAD_10PF: 10pF internal load
+ */
+enum si5351_xtal_load_cap {
+	SI5351_XTAL_LOAD_DEFAULT = 0,
+	SI5351_XTAL_LOAD_6PF = 6,
+	SI5351_XTAL_LOAD_8PF = 8,
+	SI5351_XTAL_LOAD_10PF = 10,
+};
+
+/**
  * struct si5351_clkout_config - Si5351 clock output configuration
  * @clkout: clkout number
  * @multisynth_src: multisynth source clock
@@ -110,6 +124,7 @@ struct si5351_clkout_config {
 struct si5351_platform_data {
 	enum si5351_pll_src pll_src[2];
 	struct si5351_clkout_config clkout[8];
+	enum si5351_xtal_load_cap xtal_load;
 };
 
 #endif

@@ -29,6 +29,7 @@ Required properties:
 Optional properties:
 - silabs,pll-source: pair of (number, source) for each pll. Allows
   to overwrite clock source of pll A (number=0) or B (number=1).
+- silabs,xtal-load-cap: internal crystal load capacitance, in pF.
 
 ==Child nodes==
 
@@ -81,6 +82,9 @@ i2c-master-node {
 
 		/* connect xtal input as source of pll0 and pll1 */
 		silabs,pll-source = <0 0>, <1 0>;
+
+		/* set internal load capacitor to 8pF */
+		silabs,xtal-load-cap = <8>;
 
 		/*
 		 * overwrite clkout0 configuration with:
