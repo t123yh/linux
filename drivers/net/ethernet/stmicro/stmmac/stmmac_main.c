@@ -3017,14 +3017,6 @@ int stmmac_dvr_probe(struct device *device,
 		goto error_netdev_register;
 	}
 
-	ret = dwmac_rk_create_loopback_sysfs(device);
-	if (ret) {
-		netdev_err(priv->dev, "%s: ERROR %i create loopback sysfs\n",
-			   __func__, ret);
-		unregister_netdev(ndev);
-		goto error_netdev_register;
-	}
-
 #ifdef CONFIG_DWMAC_RK_AUTO_DELAYLINE
 	INIT_DELAYED_WORK(&priv->scan_dwork, stmmac_scan_delayline_dwork);
 #endif
@@ -3076,7 +3068,6 @@ int stmmac_dvr_remove(struct device *dev)
 	    priv->pcs != STMMAC_PCS_RTBI)
 		stmmac_mdio_unregister(ndev);
 	mutex_destroy(&priv->lock);
-	dwmac_rk_remove_loopback_sysfs(dev);
 	free_netdev(ndev);
 
 	return 0;

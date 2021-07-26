@@ -247,6 +247,8 @@ void stmmac_set_mac(void __iomem *ioaddr, bool enable)
 	writel(value, ioaddr + MAC_CTRL_REG);
 }
 
+EXPORT_SYMBOL(stmmac_set_mac);
+
 void stmmac_get_mac_addr(void __iomem *ioaddr, unsigned char *addr,
 			 unsigned int high, unsigned int low)
 {
