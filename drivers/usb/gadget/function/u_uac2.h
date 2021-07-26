@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * u_uac2.h
  *
@@ -6,11 +7,7 @@
  * Copyright (c) 2014 Samsung Electronics Co., Ltd.
  *		http://www.samsung.com
  *
- * Author: Andrzej Pietrasiewicz <andrzej.p@samsung.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+ * Author: Andrzej Pietrasiewicz <andrzejtp2010@gmail.com>
  */
 
 #ifndef U_UAC2_H
@@ -24,7 +21,9 @@
 #define UAC2_DEF_CCHMASK 0x3
 #define UAC2_DEF_CSRATE 64000
 #define UAC2_DEF_CSSIZE 2
-#define UAC2_DEF_REQ_NUM 2
+#define UAC2_DEF_CSYNC		USB_ENDPOINT_SYNC_ASYNC
+#define UAC2_DEF_REQ_NUM 8
+#define UAC2_DEF_FB_MAX 5
 
 struct f_uac2_opts {
 	struct usb_function_instance	func_inst;
@@ -34,7 +33,9 @@ struct f_uac2_opts {
 	int				c_chmask;
 	int				c_srate;
 	int				c_ssize;
+	int				c_sync;
 	int				req_number;
+	int				fb_max;
 	bool				bound;
 
 	struct mutex			lock;
