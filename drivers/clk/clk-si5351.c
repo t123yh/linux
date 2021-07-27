@@ -1340,6 +1340,8 @@ static int si5351_dt_parse(struct i2c_client *client,
 
 		pdata->clkout[num].pll_master =
 			of_property_read_bool(child, "silabs,pll-master");
+
+		of_property_read_string(child, "clock-output-names", &pdata->clkout[num].name);
 	}
 	client->dev.platform_data = pdata;
 
@@ -1616,7 +1618,10 @@ static int si5351_i2c_probe(struct i2c_client *client,
 		drvdata->clkout[n].drvdata = drvdata;
 		drvdata->clkout[n].hw.init = &init;
 		memset(&init, 0, sizeof(init));
-		init.name = si5351_clkout_names[n];
+		if (pdata->clkout[n].name)
+			init.name = pdata->clkout[n].name;
+		else 
+			init.name = si5351_clkout_names[n];
 		init.ops = &si5351_clkout_ops;
 		init.flags = 0;
 		if (pdata->clkout[n].clkout_src == SI5351_CLKOUT_SRC_MSYNTH_N)

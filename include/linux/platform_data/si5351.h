@@ -109,6 +109,7 @@ struct si5351_clkout_config {
 	enum si5351_disable_state disable_state;
 	bool pll_master;
 	unsigned long rate;
+	const char *name;
 };
 
 /**
