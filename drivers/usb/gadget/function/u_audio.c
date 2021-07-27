@@ -466,9 +466,7 @@ int u_audio_start_capture(struct g_audio *audio_dev)
 	usb_ep_enable(ep);
 
 	for (i = 0; i < params->req_number; i++) {
-		printk("REQ NUM (c) %d\n", i);
 		if (!prm->reqs[i]) {
-			printk("ALLOC %d\n", i);
 			req = usb_ep_alloc_request(ep, GFP_ATOMIC);
 			if (req == NULL)
 				return -ENOMEM;
@@ -496,7 +494,6 @@ int u_audio_start_capture(struct g_audio *audio_dev)
 	usb_ep_enable(ep_fback);
 	req_len = ep_fback->maxpacket;
 
-	printk("ALLOC FB\n");
 	req_fback = usb_ep_alloc_request(ep_fback, GFP_ATOMIC);
 	if (req_fback == NULL)
 		return -ENOMEM;
@@ -585,9 +582,7 @@ int u_audio_start_playback(struct g_audio *audio_dev)
 	usb_ep_enable(ep);
 
 	for (i = 0; i < params->req_number; i++) {
-		printk("REQ NUM %d\n", i);
 		if (!prm->reqs[i]) {
-			printk("ALLOC %d\n", i);
 			req = usb_ep_alloc_request(ep, GFP_ATOMIC);
 			if (req == NULL)
 				return -ENOMEM;
@@ -679,7 +674,7 @@ static int u_audio_pitch_put(struct snd_kcontrol *kcontrol,
 static const struct snd_kcontrol_new u_audio_controls[]  = {
 {
 	.iface =        SNDRV_CTL_ELEM_IFACE_PCM,
-	.name =         "Capture Pitch 1000000",
+	.name =         "PCM Rate Shift 1000000",
 	.info =         u_audio_pitch_info,
 	.get =          u_audio_pitch_get,
 	.put =          u_audio_pitch_put,
