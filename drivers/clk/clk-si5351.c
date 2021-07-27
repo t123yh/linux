@@ -516,6 +516,10 @@ static int si5351_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 		container_of(hw, struct si5351_hw_data, hw);
 	u8 reg = (hwdata->num == 0) ? SI5351_PLLA_PARAMETERS :
 		SI5351_PLLB_PARAMETERS;
+	u8 pll = hwdata->num == 0? SI5351_PLL_RESET_A :
+		SI5351_PLL_RESET_B;
+	unsigned int v;
+	int err;
 
 	/* write multisynth parameters */
 	si5351_write_parameters(hwdata->drvdata, reg, &hwdata->params);
@@ -524,6 +528,14 @@ static int si5351_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 	si5351_set_bits(hwdata->drvdata, SI5351_CLK6_CTRL + hwdata->num,
 		SI5351_CLK_INTEGER_MODE,
 		(hwdata->params.p2 == 0) ? SI5351_CLK_INTEGER_MODE : 0);
+
+
+	/* Do a pll soft reset on the affected pll */
+	si5351_reg_write(hwdata->drvdata, SI5351_PLL_RESET, pll);
+	err = regmap_read_poll_timeout(hwdata->drvdata->regmap, SI5351_PLL_RESET, v,
+				 !(v & pll), 0, 20000);
+	if (err < 0)
+		dev_err(&hwdata->drvdata->client->dev, "Reset bit didn't clear\n");
 
 	dev_dbg(&hwdata->drvdata->client->dev,
 		"%s - %s: p1 = %lu, p2 = %lu, p3 = %lu, parent_rate = %lu, rate = %lu\n",
