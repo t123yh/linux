@@ -246,7 +246,7 @@ static struct rockchip_clk_branch rk3308_pdm_fracmux __initdata =
 			RK3308_CLKSEL_CON(46), 15, 1, MFLAGS);
 
 static struct rockchip_clk_branch rk3308_i2s0_8ch_tx_fracmux __initdata =
-	MUX(SCLK_I2S0_8CH_TX_MUX, "clk_i2s0_8ch_tx_mux", mux_i2s0_8ch_tx_p, CLK_SET_RATE_PARENT,
+	MUX(SCLK_I2S0_8CH_TX_MUX, "clk_i2s0_8ch_tx_mux", mux_i2s0_8ch_tx_p, CLK_SET_RATE_PARENT | CLK_SET_RATE_NO_REPARENT,
 			RK3308_CLKSEL_CON(52), 10, 2, MFLAGS);
 
 static struct rockchip_clk_branch rk3308_i2s0_8ch_rx_fracmux __initdata =
