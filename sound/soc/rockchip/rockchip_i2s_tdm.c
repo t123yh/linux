@@ -38,6 +38,10 @@ struct txrx_config {
 	u32 reg;
 	u32 txonly;
 	u32 rxonly;
+
+	u32 mclk_reg;
+	u32 mclk_output_val;
+	u32 mclk_input_val;
 };
 
 struct rk_i2s_soc_data {
@@ -58,6 +62,8 @@ struct rk_i2s_tdm_dev {
 	struct clk *mclk_tx_src;
 	/* The mclk_rx_src is parent of mclk_rx */
 	struct clk *mclk_rx_src;
+	bool mclk_output;
+
 	/*
 	 * The mclk_root0 and mclk_root1 are root parent and supplies for
 	 * the different FS.
@@ -1022,7 +1028,7 @@ static int rockchip_i2s_tdm_set_sysclk(struct snd_soc_dai *cpu_dai, int stream,
 			i2s_tdm->mclk_rx_freq = freq;
 	}
 
-	dev_dbg(i2s_tdm->dev, "The target mclk_%s freq is: %d\n",
+	dev_err(i2s_tdm->dev, "The target mclk_%s freq is: %d\n",
 		stream ? "rx" : "tx", freq);
 
 	return 0;
@@ -1169,16 +1175,8 @@ static int common_soc_init(struct device *dev, u32 addr)
 	struct rk_i2s_tdm_dev *i2s_tdm = dev_get_drvdata(dev);
 	const struct txrx_config *configs = i2s_tdm->soc_data->configs;
 	u32 reg = 0, val = 0, trcm = i2s_tdm->clk_trcm;
+	u32 mclk_reg, mclk_val;
 	int i;
-
-	switch (trcm) {
-	case I2S_CKR_TRCM_TXONLY:
-		/* fall through */
-	case I2S_CKR_TRCM_RXONLY:
-		break;
-	default:
-		return 0;
-	}
 
 	for (i = 0; i < i2s_tdm->soc_data->config_count; i++) {
 		if (addr != configs[i].addr)
@@ -1186,12 +1184,26 @@ static int common_soc_init(struct device *dev, u32 addr)
 		reg = configs[i].reg;
 		if (trcm == I2S_CKR_TRCM_TXONLY)
 			val = configs[i].txonly;
-		else
+		else if (trcm == I2S_CKR_TRCM_RXONLY)
 			val = configs[i].rxonly;
+		else
+			val = 0;
+
+		mclk_reg = configs[i].mclk_reg;
+		if (i2s_tdm->mclk_output) {
+			mclk_val = configs[i].mclk_output_val;
+		} else {
+			mclk_val = configs[i].mclk_input_val;
+		}
 	}
 
 	if (reg)
 		regmap_write(i2s_tdm->grf, reg, val);
+
+	if (mclk_reg) {
+		printk("Writing %08X to %px", mclk_val, i2s_tdm->cru_base + mclk_reg);
+		writel(mclk_val, i2s_tdm->cru_base + mclk_reg);
+	}
 
 	return 0;
 }
@@ -1205,8 +1217,10 @@ static const struct txrx_config rk1808_txrx_config[] = {
 };
 
 static const struct txrx_config rk3308_txrx_config[] = {
-	{ 0xff300000, 0x308, RK3308_I2S0_CLK_TXONLY, RK3308_I2S0_CLK_RXONLY },
-	{ 0xff310000, 0x308, RK3308_I2S1_CLK_TXONLY, RK3308_I2S1_CLK_RXONLY },
+	{ 0xff300000, 0x308, RK3308_I2S0_CLK_TXONLY, RK3308_I2S0_CLK_RXONLY, 
+	0x334, RK3308_I2S0_MCLK_OUTPUT , RK3308_I2S0_MCLK_INPUT },
+	{ 0xff310000, 0x308, RK3308_I2S1_CLK_TXONLY, RK3308_I2S1_CLK_RXONLY,
+	0x334, RK3308_I2S1_MCLK_OUTPUT , RK3308_I2S1_MCLK_INPUT },
 };
 
 static struct rk_i2s_soc_data px30_i2s_soc_data = {
@@ -1475,6 +1489,8 @@ static int rockchip_i2s_tdm_probe(struct platform_device *pdev)
 			i2s_tdm->bclk_fs = val;
 	}
 
+	i2s_tdm->mclk_output = !of_property_read_bool(node, "rockchip,mclk-input");
+
 	i2s_tdm->clk_trcm = I2S_CKR_TRCM_TXRX;
 	if (!of_property_read_u32(node, "rockchip,clk-trcm", &val)) {
 		if (val >= 0 && val <= 2) {
@@ -1493,12 +1509,11 @@ static int rockchip_i2s_tdm_probe(struct platform_device *pdev)
 	if (IS_ERR(i2s_tdm->grf))
 		return PTR_ERR(i2s_tdm->grf);
 
+	cru_node = of_parse_phandle(node, "rockchip,cru", 0);
+	i2s_tdm->cru_base = of_iomap(cru_node, 0);
+	if (!i2s_tdm->cru_base)
+		return -ENOENT;
 	if (i2s_tdm->clk_trcm) {
-		cru_node = of_parse_phandle(node, "rockchip,cru", 0);
-		i2s_tdm->cru_base = of_iomap(cru_node, 0);
-		if (!i2s_tdm->cru_base)
-			return -ENOENT;
-
 		i2s_tdm->tx_reset_id = of_i2s_resetid_get(node, "tx-m");
 		if (i2s_tdm->tx_reset_id < 0)
 			return -EINVAL;
@@ -1643,9 +1658,9 @@ static int rockchip_i2s_tdm_remove(struct platform_device *pdev)
 		i2s_tdm_runtime_suspend(&pdev->dev);
 
 	if (!IS_ERR(i2s_tdm->mclk_tx))
-		clk_prepare_enable(i2s_tdm->mclk_tx);
+		clk_disable_unprepare(i2s_tdm->mclk_tx);
 	if (!IS_ERR(i2s_tdm->mclk_rx))
-		clk_prepare_enable(i2s_tdm->mclk_rx);
+		clk_disable_unprepare(i2s_tdm->mclk_rx);
 	if (!IS_ERR(i2s_tdm->hclk))
 		clk_disable_unprepare(i2s_tdm->hclk);
 
