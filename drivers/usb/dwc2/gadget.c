@@ -2966,42 +2966,45 @@ static void dwc2_hsotg_ep_stop_xfr(struct dwc2_hsotg *hsotg,
 	dev_dbg(hsotg->dev, "%s: stopping transfer on %s\n", __func__,
 		hs_ep->name);
 
-	if (hs_ep->dir_in) {
-		if (hsotg->dedicated_fifos || hs_ep->periodic) {
-			__orr32(hsotg->regs + epctrl_reg, DXEPCTL_SNAK);
-			/* Wait for Nak effect */
-			if (dwc2_hsotg_wait_bit_set(hsotg, epint_reg,
-						    DXEPINT_INEPNAKEFF, 100))
-				dev_warn(hsotg->dev,
-					 "%s: timeout DIEPINT.NAKEFF\n",
-					 __func__);
+	if (epctrl_reg & DXEPCTL_EPENA) {
+		if (hs_ep->dir_in) {
+			if (hsotg->dedicated_fifos || hs_ep->periodic) {
+				__orr32(hsotg->regs + epctrl_reg, DXEPCTL_SNAK);
+				/* Wait for Nak effect */
+					if (dwc2_hsotg_wait_bit_set(hsotg, epint_reg,
+									DXEPINT_INEPNAKEFF, 100)) {
+						dev_warn(hsotg->dev,
+							"%s: timeout DIEPINT.NAKEFF\n",
+							__func__);
+					}
+			} else {
+				__orr32(hsotg->regs + DCTL, DCTL_SGNPINNAK);
+				/* Wait for Nak effect */
+				if (dwc2_hsotg_wait_bit_set(hsotg, GINTSTS,
+								GINTSTS_GINNAKEFF, 100))
+					dev_warn(hsotg->dev,
+						"%s: timeout GINTSTS.GINNAKEFF\n",
+						__func__);
+			}
 		} else {
-			__orr32(hsotg->regs + DCTL, DCTL_SGNPINNAK);
-			/* Wait for Nak effect */
+			if (!(dwc2_readl(hsotg->regs + GINTSTS) & GINTSTS_GOUTNAKEFF))
+				__orr32(hsotg->regs + DCTL, DCTL_SGOUTNAK);
+
+			/* Wait for global nak to take effect */
 			if (dwc2_hsotg_wait_bit_set(hsotg, GINTSTS,
-						    GINTSTS_GINNAKEFF, 100))
-				dev_warn(hsotg->dev,
-					 "%s: timeout GINTSTS.GINNAKEFF\n",
-					 __func__);
+							GINTSTS_GOUTNAKEFF, 100))
+				dev_warn(hsotg->dev, "%s: timeout GINTSTS.GOUTNAKEFF\n",
+					__func__);
 		}
-	} else {
-		if (!(dwc2_readl(hsotg->regs + GINTSTS) & GINTSTS_GOUTNAKEFF))
-			__orr32(hsotg->regs + DCTL, DCTL_SGOUTNAK);
 
-		/* Wait for global nak to take effect */
-		if (dwc2_hsotg_wait_bit_set(hsotg, GINTSTS,
-					    GINTSTS_GOUTNAKEFF, 100))
-			dev_warn(hsotg->dev, "%s: timeout GINTSTS.GOUTNAKEFF\n",
-				 __func__);
+		/* Disable ep */
+		__orr32(hsotg->regs + epctrl_reg, DXEPCTL_EPDIS | DXEPCTL_SNAK);
+
+		/* Wait for ep to be disabled */
+		if (dwc2_hsotg_wait_bit_set(hsotg, epint_reg, DXEPINT_EPDISBLD, 100))
+			dev_warn(hsotg->dev,
+				"%s: timeout DOEPCTL.EPDisable\n", __func__);
 	}
-
-	/* Disable ep */
-	__orr32(hsotg->regs + epctrl_reg, DXEPCTL_EPDIS | DXEPCTL_SNAK);
-
-	/* Wait for ep to be disabled */
-	if (dwc2_hsotg_wait_bit_set(hsotg, epint_reg, DXEPINT_EPDISBLD, 100))
-		dev_warn(hsotg->dev,
-			 "%s: timeout DOEPCTL.EPDisable\n", __func__);
 
 	/* Clear EPDISBLD interrupt */
 	__orr32(hsotg->regs + epint_reg, DXEPINT_EPDISBLD);
