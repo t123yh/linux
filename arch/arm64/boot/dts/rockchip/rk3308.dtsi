@@ -967,7 +967,7 @@
 		reset-names = "tx-m", "rx-m";
 		rockchip,cru = <&cru>;
 		rockchip,grf = <&grf>;
-		rockchip,mclk-calibrate;
+		// rockchip,mclk-calibrate;
 		pinctrl-names = "default";
 		pinctrl-0 = <&i2s_8ch_0_sclktx
 			     &i2s_8ch_0_sclkrx
