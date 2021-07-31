@@ -174,9 +174,6 @@
 	sound {
 		compatible = "complex-audio-card";
 		complex-audio-card,name = "Test123";
-		pinctrl-names = "default";
-		pinctrl-0 = <&mute_pin_ctrl>;
-		mute-gpios = <&gpio0 RK_PC1 GPIO_ACTIVE_HIGH>;
 
 		complex-audio-card,dai-link@0 {		/* I2S - HDMI */
 			format = "i2s";
@@ -184,22 +181,28 @@
 				sound-dai = <&i2s_8ch_0 0>;
 			};
 			codec {
-				frame-master;
-				bitclock-master;
 				sound-dai = <&merus_amp>;
 			};
 		};
+	};
+
+	merus_amp: merus_amp {
+		#sound-dai-cells = <0>;
+		compatible = "ma120x0p-complex";
+		pinctrl-names = "default";
+		pinctrl-0 = <&amp_pin_ctrl>;
+		mute-gpios = <&gpio0 RK_PC1 GPIO_ACTIVE_HIGH>;
+		enable-gpios = <&gpio0 RK_PC0 GPIO_ACTIVE_HIGH>;
+		i2c-bus = <&i2c1>;
+		ma120x0p,default-pmp = <2>;
 	};
 };
 
 &pinctrl {
 	amps {
-		enable_pin_ctrl: enable-ctrl {
+		amp_pin_ctrl: amp-ctrl {
 			rockchip,pins =
-				<0 RK_PC0 0 &pcfg_pull_none_8ma>;
-		};
-		mute_pin_ctrl: mute-ctrl {
-			rockchip,pins =
+				<0 RK_PC0 0 &pcfg_pull_none_8ma>,
 				<0 RK_PC1 0 &pcfg_pull_none_8ma>;
 		};
 	};
@@ -247,25 +250,13 @@
 
 		i2s_mclk: clkout2 {
 			reg = <2>;
-			silabs,drive-strength = <4>;
+			silabs,drive-strength = <8>;
 			silabs,multisynth-source = <0>;
 			silabs,clock-source = <0>;
 			silabs,pll-master;
-			clock-frequency = <24576000>;
 			clock-output-names = "mclk_i2s0_8ch_in";
 		};
 	};
-
-	merus_amp: ma120x0p@20 {
-		#sound-dai-cells = <0>;
-		compatible = "ma,ma120x0p";
-		reg = <0x20>;
-		status = "okay";
-		pinctrl-names = "default";
-		pinctrl-0 = <&enable_pin_ctrl>;
-		enable_gp-gpios = <&gpio0 RK_PC0 GPIO_ACTIVE_HIGH>;
-	};
-
 };
 
 &cpu0 {
