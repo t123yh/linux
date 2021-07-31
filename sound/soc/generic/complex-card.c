@@ -57,7 +57,7 @@ struct complex_card_data {
 		struct asoc_complex_dai cpu_dai;
 		struct asoc_complex_dai codec_dai;
 	} *dai_props;
-	struct gpio_desc *mute_gpio;
+	// struct gpio_desc *mute_gpio;
 	struct snd_soc_dai_link dai_link[];	/* dynamically allocated */
 };
 
@@ -98,14 +98,14 @@ static int asoc_complex_card_hw_params(struct snd_pcm_substream *substream,
 	case 64000:
 	case 96000:
 	case 192000:
-		mclk = 12288000 / 2;
+		mclk = 12288000;
 		break;
 	case 11025:
 	case 22050:
 	case 44100:
 	case 88200:
 	case 176400:
-		mclk = 11289600 / 2;
+		mclk = 11289600;
 		break;
 	default:
 		dev_err(rtd->dev, "Invalid LRCK freq: %u Hz\n",
@@ -129,6 +129,7 @@ static int asoc_complex_card_hw_params(struct snd_pcm_substream *substream,
 
 static int asoc_complex_card_trigger(struct snd_pcm_substream *substream, int event)
 {
+/*
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 	struct complex_card_data *priv = snd_soc_card_get_drvdata(rtd->card);
 
@@ -148,6 +149,7 @@ static int asoc_complex_card_trigger(struct snd_pcm_substream *substream, int ev
 	default:
 		return -EINVAL;
 	}
+	*/
 
 	return 0;
 }
@@ -316,7 +318,7 @@ static int asoc_complex_card_dai_link_of(struct device_node *node,
 		goto dai_link_of_err;
 	}
 
-	dai_link->dai_fmt = SND_SOC_DAIFMT_CBS_CFS | SND_SOC_DAIFMT_LEFT_J | SND_SOC_DAIFMT_NB_NF;
+	dai_link->dai_fmt = SND_SOC_DAIFMT_CBS_CFS | SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF;
 
 	ret = asoc_complex_card_sub_parse_of(cpu, &dai_props->cpu_dai,
 					    &dai_link->cpu_of_node,
@@ -422,6 +424,7 @@ static int asoc_complex_card_parse_of(struct device_node *node,
 	dev_dbg(dev, "New complex-card: %s\n", priv->snd_card.name ?
 		priv->snd_card.name : "");
 
+/*
 	printk("Get GPIO Line...\n");
 	priv->mute_gpio = devm_gpiod_get(dev, "mute", GPIOD_OUT_LOW);
 	if (IS_ERR(priv->mute_gpio)) {
@@ -429,6 +432,7 @@ static int asoc_complex_card_parse_of(struct device_node *node,
 		dev_err(dev, "Failed to get mute gpio line: %d\n", ret);
 		return ret;
 	}
+	*/
 
 	/* Single/Muti DAI link(s) & New style of DT node */
 	if (of_get_child_by_name(node, "complex-audio-card,dai-link")) {

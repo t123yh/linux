@@ -1014,4 +1014,10 @@ config SND_SOC_MA120X0P
 		Enable support for Infineon MA120X0P Multilevel Class-D audio power
 		amplifiers.
 
+config SND_SOC_MA120X0P_COMPLEX
+	tristate "MA120X0P Copmlex"
+	depends on I2C
+	help
+	  Great creature.
+
 endmenu
