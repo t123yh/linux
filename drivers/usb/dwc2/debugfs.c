@@ -183,7 +183,6 @@ DEFINE_SHOW_ATTRIBUTE(state);
 static int fifo_show(struct seq_file *seq, void *v)
 {
 	struct dwc2_hsotg *hsotg = seq->private;
-	int fifo_count = dwc2_hsotg_tx_fifo_count(hsotg);
 	u32 val;
 	int idx;
 
@@ -197,7 +196,7 @@ static int fifo_show(struct seq_file *seq, void *v)
 
 	seq_puts(seq, "\nPeriodic TXFIFOs:\n");
 
-	for (idx = 1; idx <= fifo_count; idx++) {
+	for (idx = 1; idx < hsotg->num_of_eps; idx++) {
 		val = dwc2_readl(hsotg, DPTXFSIZN(idx));
 
 		seq_printf(seq, "\tDPTXFIFO%2d: Size %d, Start 0x%08x\n", idx,
@@ -691,8 +690,6 @@ static int params_show(struct seq_file *seq, void *v)
 	print_param(seq, p, ulpi_fs_ls);
 	print_param(seq, p, host_support_fs_ls_low_power);
 	print_param(seq, p, host_ls_low_power_phy_clk);
-	print_param(seq, p, activate_stm_fs_transceiver);
-	print_param(seq, p, activate_stm_id_vb_detection);
 	print_param(seq, p, ts_dline);
 	print_param(seq, p, reload_ctl);
 	print_param_hex(seq, p, ahbcfg);
@@ -704,7 +701,6 @@ static int params_show(struct seq_file *seq, void *v)
 	print_param(seq, p, besl);
 	print_param(seq, p, hird_threshold_en);
 	print_param(seq, p, hird_threshold);
-	print_param(seq, p, service_interval);
 	print_param(seq, p, host_dma);
 	print_param(seq, p, g_dma);
 	print_param(seq, p, g_dma_desc);
@@ -773,7 +769,7 @@ int dwc2_debugfs_init(struct dwc2_hsotg *hsotg)
 	int			ret;
 	struct dentry		*root;
 
-	root = debugfs_create_dir(dev_name(hsotg->dev), usb_debug_root);
+	root = debugfs_create_dir(dev_name(hsotg->dev), NULL);
 	hsotg->debug_root = root;
 
 	debugfs_create_file("params", 0444, root, hsotg, &params_fops);

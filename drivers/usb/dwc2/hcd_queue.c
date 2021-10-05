@@ -59,7 +59,7 @@
 #define DWC2_UNRESERVE_DELAY (msecs_to_jiffies(5))
 
 /* If we get a NAK, wait this long before retrying */
-#define DWC2_RETRY_WAIT_DELAY (1 * 1E6L)
+#define DWC2_RETRY_WAIT_DELAY 1*1E6L
 
 /**
  * dwc2_periodic_channel_available() - Checks that a channel is available for a
@@ -675,7 +675,7 @@ static int dwc2_hs_pmap_schedule(struct dwc2_hsotg *hsotg, struct dwc2_qh *qh,
 }
 
 /**
- * dwc2_hs_pmap_unschedule() - Undo work done by dwc2_hs_pmap_schedule()
+ * dwc2_ls_pmap_unschedule() - Undo work done by dwc2_hs_pmap_schedule()
  *
  * @hsotg:       The HCD state structure for the DWC OTG controller.
  * @qh:          QH for the periodic transfer.
@@ -730,8 +730,14 @@ static int dwc2_uframe_schedule_split(struct dwc2_hsotg *hsotg,
 	 * Note that this will tend to front-load the high speed schedule.
 	 * We may eventually want to try to avoid this by either considering
 	 * both schedules together or doing some sort of round robin.
+	 *
+	 * For isoc split out, start schedule at the 2 * DWC2_SLICES_PER_UFRAME
+	 * to transfer SSPLIT-begin OUT transaction like EHCI controller.
 	 */
-	ls_search_slice = 0;
+	if (qh->ep_type == USB_ENDPOINT_XFER_ISOC && !qh->ep_is_in)
+		ls_search_slice = 2 * DWC2_SLICES_PER_UFRAME;
+	else
+		ls_search_slice = 0;
 
 	while (ls_search_slice < DWC2_LS_SCHEDULE_SLICES) {
 		int start_s_uframe;
