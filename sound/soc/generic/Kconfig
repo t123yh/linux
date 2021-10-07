@@ -17,3 +17,8 @@ config SND_AUDIO_GRAPH_CARD
 	  This option enables generic simple sound card support
 	  with OF-graph DT bindings.
 	  It also support DPCM of multi CPU single Codec ststem.
+
+config SND_COMPLEX_CARD
+       tristate "ASoC Complex sound card support"
+       help
+         This option enables generic simple sound card support
