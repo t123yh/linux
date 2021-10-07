@@ -1920,5 +1920,11 @@ config SND_SOC_LPASS_TX_MACRO
 	depends on COMMON_CLK
 	select REGMAP_MMIO
 	tristate "Qualcomm TX Macro in LPASS(Low Power Audio SubSystem)"
+	
+config SND_SOC_MA120X0P_COMPLEX
+	tristate "MA120X0P Copmlex"
+	depends on I2C
+	help
+	  Great creature.
 
 endmenu
