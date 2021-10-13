@@ -46,6 +46,7 @@ struct uac_rtd_params {
 
 	struct usb_request *req_fback;	/* Feedback endpoint request */
 	bool fb_ep_enabled;		/* if the ep is enabled */
+	struct snd_kcontrol *snd_kctl_stream_active;
 
 	/* Volume/Mute controls and their state */
 	int fu_id;			/* Feature Unit ID */
@@ -533,6 +534,9 @@ int u_audio_start_capture(struct g_audio *audio_dev)
 	if (usb_ep_queue(ep_fback, req_fback, GFP_ATOMIC))
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 
+	snd_ctl_notify(uac->card, SNDRV_CTL_EVENT_MASK_VALUE,
+		&prm->snd_kctl_stream_active->id);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(u_audio_start_capture);
@@ -544,6 +548,9 @@ void u_audio_stop_capture(struct g_audio *audio_dev)
 	if (audio_dev->in_ep_fback)
 		free_ep_fback(&uac->c_prm, audio_dev->in_ep_fback);
 	free_ep(&uac->c_prm, audio_dev->out_ep);
+
+	snd_ctl_notify(uac->card, SNDRV_CTL_EVENT_MASK_VALUE,
+		&uac->p_prm.snd_kctl_stream_active->id);
 }
 EXPORT_SYMBOL_GPL(u_audio_stop_capture);
 
@@ -612,6 +619,9 @@ int u_audio_start_playback(struct g_audio *audio_dev)
 			dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 	}
 
+	snd_ctl_notify(uac->card, SNDRV_CTL_EVENT_MASK_VALUE,
+		&prm->snd_kctl_stream_active->id);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(u_audio_start_playback);
@@ -621,6 +631,9 @@ void u_audio_stop_playback(struct g_audio *audio_dev)
 	struct snd_uac_chip *uac = audio_dev->uac;
 
 	free_ep(&uac->p_prm, audio_dev->in_ep);
+
+	snd_ctl_notify(uac->card, SNDRV_CTL_EVENT_MASK_VALUE,
+		&uac->p_prm.snd_kctl_stream_active->id);
 }
 EXPORT_SYMBOL_GPL(u_audio_stop_playback);
 
@@ -777,6 +790,24 @@ static int u_audio_pitch_put(struct snd_kcontrol *kcontrol,
 	}
 
 	return change;
+}
+
+static int u_audio_stream_active_info(struct snd_kcontrol* kcontrol, 
+				   struct snd_ctl_elem_info *uinfo) {
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BOOLEAN;
+	uinfo->access = SNDRV_CTL_ELEM_ACCESS_READ;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 1;
+	return 0;
+}
+
+static int u_audio_stream_active_get(struct snd_kcontrol* kcontrol, 
+				struct snd_ctl_elem_value *ucontrol) {
+	struct uac_rtd_params *prm = snd_kcontrol_chip(kcontrol);
+	
+	ucontrol->value.integer.value[0] = prm->ep_enabled;
+	return 0;
 }
 
 static int u_audio_mute_info(struct snd_kcontrol *kcontrol,
@@ -1058,6 +1089,7 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 		if (fu->mute_present) {
 			snprintf(ctrl_name, sizeof(ctrl_name), "PCM %s Switch",
 				 direction);
+			printk("MUTE sw\n");
 
 			kctl_new = (struct snd_kcontrol_new) {
 				.iface =	SNDRV_CTL_ELEM_IFACE_MIXER,
@@ -1117,6 +1149,30 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 			prm->volume_min = fu->volume_min;
 			prm->volume_res = fu->volume_res;
 		}
+
+		snprintf(ctrl_name, sizeof(ctrl_name), "PCM %s Stream Active",
+				direction);
+
+		kctl_new = (struct snd_kcontrol_new) {
+			.iface =	SNDRV_CTL_ELEM_IFACE_MIXER,
+			.name =		ctrl_name,
+			.info =		u_audio_stream_active_info,
+			.get =		u_audio_stream_active_get,
+		},
+		kctl = snd_ctl_new1(&kctl_new, prm);
+		if (!kctl) {
+			err = -ENOMEM;
+			goto snd_fail;
+		}
+
+		kctl->id.device = pcm->device;
+		kctl->id.subdevice = i;
+
+		err = snd_ctl_add(card, kctl);
+		if (err < 0)
+			goto snd_fail;
+
+		prm->snd_kctl_stream_active = kctl;
 	}
 
 	strscpy(card->driver, card_name, sizeof(card->driver));
