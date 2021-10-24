@@ -15984,6 +15984,7 @@ ROCKCHIP SPDIFRX DRIVER
 M:	Yunhao Tian <t123yh.xyz@gmail.com>
 L:	linux-rockchip@lists.infradead.org
 S:	Maintained
+F:	Documentation/devicetree/bindings/sound/rockchip-spdifrx.yaml
 F:	sound/soc/rockchip/rockchip_spdifrx.*
 
 ROCKCHIP VIDEO DECODER DRIVER
