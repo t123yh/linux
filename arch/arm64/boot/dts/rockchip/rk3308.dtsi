@@ -710,6 +710,22 @@
 		status = "disabled";
 	};
 
+	spdif_rx: spdif-rx@ff3b0000 {
+		#sound-dai-cells = <0>;
+		compatible = "rockchip,rk3308-spdifrx";
+		reg = <0x0 0xff3b0000 0x0 0x1000>;
+		interrupts = <GIC_SPI 56 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&cru SCLK_SPDIF_RX>, <&cru HCLK_SPDIFRX>;
+		clock-names = "mclk", "hclk";
+		dmas = <&dmac1 14>;
+		dma-names = "rx";
+		resets = <&cru SRST_SPDIFRX_M>;
+		reset-names = "spdifrx-m";
+		pinctrl-names = "default";
+		pinctrl-0 = <&spdif_in>;
+		status = "disabled";
+	};
+
 	spdif_tx: spdif-tx@ff3a0000 {
 		compatible = "rockchip,rk3308-spdif", "rockchip,rk3066-spdif";
 		reg = <0x0 0xff3a0000 0x0 0x1000>;
