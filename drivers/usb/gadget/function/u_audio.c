@@ -1106,7 +1106,7 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 			}
 
 			kctl->id.device = pcm->device;
-			kctl->id.subdevice = i;
+			kctl->id.subdevice = 0;
 
 			err = snd_ctl_add(card, kctl);
 			if (err < 0)
@@ -1133,7 +1133,7 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 			}
 
 			kctl->id.device = pcm->device;
-			kctl->id.subdevice = i;
+			kctl->id.subdevice = 0;
 
 			kctl->tlv.c = u_audio_volume_tlv;
 			kctl->vd[0].access |=
@@ -1150,11 +1150,11 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 			prm->volume_res = fu->volume_res;
 		}
 
-		snprintf(ctrl_name, sizeof(ctrl_name), "PCM %s Stream Active",
+		snprintf(ctrl_name, sizeof(ctrl_name), "PCM %s Active",
 				direction);
 
 		kctl_new = (struct snd_kcontrol_new) {
-			.iface =	SNDRV_CTL_ELEM_IFACE_MIXER,
+			.iface =	SNDRV_CTL_ELEM_IFACE_PCM,
 			.name =		ctrl_name,
 			.info =		u_audio_stream_active_info,
 			.get =		u_audio_stream_active_get,
@@ -1166,7 +1166,7 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 		}
 
 		kctl->id.device = pcm->device;
-		kctl->id.subdevice = i;
+		kctl->id.subdevice = 0;
 
 		err = snd_ctl_add(card, kctl);
 		if (err < 0)
