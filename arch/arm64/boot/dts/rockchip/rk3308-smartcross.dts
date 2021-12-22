@@ -1,0 +1,375 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (c) 2021 Yunhao Tian
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/usb/pd.h>
+#include "rk3308.dtsi" 
+
+/ {
+	model = "SmartCross System";
+	compatible = "t123yh,smartcross", "rockchip,rk3308";
+	chosen {
+		stdout-path = "serial0:1500000n8";
+	};
+
+	aliases {
+		mmc0 = &emmc;
+	};
+
+	vdd_core: vdd-core {
+		compatible = "pwm-regulator";
+		pwms = <&pwm0 0 5000 1>;
+		regulator-name = "vdd_core";
+		regulator-min-microvolt = <827000>;
+		regulator-max-microvolt = <1340000>;
+		regulator-init-microvolt = <1015000>;
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-settling-time-up-us = <250>;
+		status = "okay";
+	};
+
+	vdd_log: vdd-log {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_log";
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <1050000>;
+		regulator-max-microvolt = <1050000>;
+	};
+
+	vdd_1v0: vdd-1v0 {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_1v0";
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <1000000>;
+		regulator-max-microvolt = <1000000>;
+	};
+
+	vccio_sdio: vcc_1v8: vcc-1v8 {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_1v8";
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		vin-supply = <&vcc_io>;
+	};
+
+	vccio_sd: vccio-sd {
+		compatible = "regulator-gpio";
+		regulator-name = "vccio_sd";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <3300000>;
+		states = <1800000 0x0
+			  3300000 0x1>;
+	};
+
+	vcc_sd: vcc-sd {
+		compatible = "regulator-fixed";
+		gpio = <&gpio4 RK_PD6 GPIO_ACTIVE_LOW>;
+		regulator-name = "vcc_sd";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+	};
+
+	vcc_1v8_codec: vcc-1v8-codec {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_1v8_codec";
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		vin-supply = <&vcc_io>;
+	};
+
+	vcc_ddr: vcc-ddr {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_ddr";
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <1500000>;
+		regulator-max-microvolt = <1500000>;
+	};
+
+	vcc_3v3_codec: vcc_io: vcc-io {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_io";
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+	};
+
+	vccio_flash: vccio-flash {
+		compatible = "regulator-fixed";
+		regulator-name = "vccio_flash";
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+
+	vcc_host_vbus: host-vbus-regulator {
+		compatible = "regulator-fixed";
+		enable-active-high;
+		gpio = <&gpio1 RK_PC5 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&host_vbus_drv>;
+		regulator-name = "vcc_host_vbus";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+	};
+
+	gpio-leds {
+		compatible = "gpio-leds";
+		status = "okay";
+
+		green-led {
+			label = "rockpis:green:power";
+			gpios = <&gpio1 RK_PC2 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "default-on";
+			default-state = "on";
+		};
+
+		blue-led {
+			label = "rockpis:blue:user";
+			gpios = <&gpio1 RK_PC4 GPIO_ACTIVE_HIGH>;
+			linux,default-trigger = "heartbeat";
+			default-state = "on";
+		};
+	};
+
+	output-sound {
+		status = "okay";
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "SmartCross-Output";
+
+        simple-audio-card,dai-link@0 {
+            reg = <0>;
+            format = "i2s";
+            cpu {
+                sound-dai = <&i2s_8ch_0 0>;
+            };
+            codec {
+                sound-dai = <&smartcross_dac 0>;
+            };
+        };
+        simple-audio-card,dai-link@1 {
+            reg = <1>;
+            format = "i2s";
+            cpu {
+                sound-dai = <&i2s_8ch_0 0>;
+            };
+            codec {
+                sound-dai = <&smartcross_dac 1>;
+            };
+        };
+        simple-audio-card,dai-link@2 {
+            reg = <2>;
+            format = "i2s";
+            cpu {
+                sound-dai = <&i2s_8ch_0 0>;
+            };
+            codec {
+                sound-dai = <&smartcross_dac 2>;
+            };
+        };
+        simple-audio-card,dai-link@3 {
+            reg = <3>;
+            format = "i2s";
+            cpu {
+                sound-dai = <&i2s_8ch_0 0>;
+            };
+            codec {
+                sound-dai = <&smartcross_dac 3>;
+            };
+        };
+	};
+
+	spdif-rx-sound {
+		status = "okay";
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "rockchip,spdif-rx-sound";
+		simple-audio-card,cpu {
+			sound-dai = <&spdif_rx>;
+		};
+		simple-audio-card,codec {
+			sound-dai = <&spdif_dummy_in>;
+		};
+	};
+	
+	spdif_dummy_in: spdif-dummy-in {
+		#sound-dai-cells = <0>;
+		compatible = "linux,spdif-dir";
+	};
+
+	smartcross_dac: smartcross-dac {
+		#sound-dai-cells = <1>;
+		compatible = "smartcross,dac-complex";
+		pinctrl-names = "default";
+		pinctrl-0 = <&amp_pin_ctrl>;
+		mute-gpios = <&gpio2 RK_PC0 GPIO_ACTIVE_HIGH>;
+		enable-gpios = <&gpio2 RK_PB7 GPIO_ACTIVE_HIGH>;
+		i2c-bus = <&i2c0>;
+		ma120x0p,default-pmp = <2>;
+	};
+	
+	i2s_clk: fixed-24576 {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24576000>;
+		clock-accuracy = <20000>;
+		clock-output-names = "mclk_i2s0_8ch_in";
+	};
+};
+
+&pinctrl {
+	amps {
+		amp_pin_ctrl: amp-ctrl {
+			rockchip,pins =
+				<2 RK_PB7 0 &pcfg_pull_none_8ma>,
+				<2 RK_PC0 0 &pcfg_pull_none_8ma>;
+		};
+	};
+};
+
+&i2s_8ch_0 {
+	#sound-dai-cells = <1>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2s_8ch_0_sclktx
+				&i2s_8ch_0_lrcktx
+				&i2s_8ch_0_sdo0
+				&i2s_8ch_0_sdo1
+				&i2s_8ch_0_sdo2
+				&i2s_8ch_0_mclk
+				&i2s_8ch_0_sdo3>;
+
+	rockchip,mclk-input;
+	clocks = <&cru SCLK_I2S0_8CH_TX>, <&cru SCLK_I2S0_8CH_RX>, <&cru HCLK_I2S0_8CH>;
+	clock-names = "mclk_tx", "mclk_rx", "hclk";
+	/delete-property/ rockchip,mclk-calibrate;
+
+	assigned-clocks = <&cru SCLK_I2S0_8CH_TX_MUX>;
+	assigned-clock-parents = <&i2s_clk>;
+
+	status = "okay";
+};
+
+&i2c0 {
+	status = "okay";
+
+	current_sensor: ina3221@42 {
+		compatible = "ti,ina3221";
+		reg = <0x42>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		input@0 {
+			reg = <0x0>;
+			status = "disabled";
+		};
+		input@1 {
+			reg = <0x1>;
+			shunt-resistor-micro-ohms = <5000>;
+		};
+		input@2 {
+			reg = <0x2>;
+			label = "VDD_5V";
+			shunt-resistor-micro-ohms = <5000>;
+		};
+	};
+};
+
+&cpu0 {
+	cpu-supply = <&vdd_core>;
+};
+
+&spdif_rx {
+	#sound-dai-cells = <0>;
+	status = "okay";
+};
+
+&emmc {
+	bus-width = <8>;
+	cap-mmc-highspeed;
+	mmc-hs200-1_8v;
+	supports-emmc;
+	disable-wp;
+	non-removable;
+	num-slots = <1>;
+	status = "okay";
+};
+
+&io_domains {
+	status = "okay";
+
+	vccio0-supply = <&vcc_io>;
+	vccio1-supply = <&vcc_io>;
+	vccio2-supply = <&vcc_1v8>;
+	vccio3-supply = <&vccio_flash>;
+	vccio4-supply = <&vccio_sdio>;
+	vccio5-supply = <&vcc_io>;
+};
+
+&pinctrl {
+	pinctrl-names = "default";
+	pinctrl-0 = <&rtc_32k>;
+
+	usb {
+		otg_vbus_drv: otg-vbus-drv {
+			rockchip,pins = <0 RK_PC5 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+		host_vbus_drv: host-vbus-drv {
+			rockchip,pins = <1 RK_PA2 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
+
+};
+
+&pwm0 {
+	status = "okay";
+	pinctrl-names = "active";
+	pinctrl-0 = <&pwm0_pin_pull_down>;
+};
+
+&u2phy {
+	status = "okay";
+
+	u2phy_host: host-port {
+		status = "okay";
+		phy-supply = <&vcc_host_vbus>;
+	};
+
+	u2phy_otg: otg-port {
+		status = "okay";
+	};
+};
+
+&usb20_otg {
+	dr_mode = "peripheral";
+	status = "okay";
+};
+
+&usb_host_ehci {
+	status = "okay";
+};
+
+&usb_host_ohci{
+	status = "okay";
+};
+
+&uart0 {
+        status = "okay";
+        pinctrl-names = "default";
+        pinctrl-0 = <&uart0_xfer>;
+};
+
+&wdt {
+        status = "okay";
+};
+
