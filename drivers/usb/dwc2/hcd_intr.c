@@ -500,7 +500,7 @@ static int dwc2_update_urb_state(struct dwc2_hsotg *hsotg,
 						      &short_read);
 
 	if (urb->actual_length + xfer_length > urb->length) {
-		dev_dbg(hsotg->dev, "%s(): trimming xfer length\n", __func__);
+		dev_warn(hsotg->dev, "%s(): trimming xfer length\n", __func__);
 		xfer_length = urb->length - urb->actual_length;
 	}
 
@@ -1180,7 +1180,10 @@ static void dwc2_update_urb_state_abn(struct dwc2_hsotg *hsotg,
 
 	if (urb->actual_length + xfer_length > urb->length) {
 		dev_warn(hsotg->dev, "%s(): trimming xfer length\n", __func__);
-		xfer_length = urb->length - urb->actual_length;
+		if (urb->length & 0x3)
+			xfer_length = 0;
+		else
+			xfer_length = urb->length - urb->actual_length;
 	}
 
 	urb->actual_length += xfer_length;
@@ -1977,18 +1980,6 @@ error:
 		qtd->error_count++;
 		dwc2_update_urb_state_abn(hsotg, chan, chnum, qtd->urb,
 					  qtd, DWC2_HC_XFER_XACT_ERR);
-		/*
-		 * We can get here after a completed transaction
-		 * (urb->actual_length >= urb->length) which was not reported
-		 * as completed. If that is the case, and we do not abort
-		 * the transfer, a transfer of size 0 will be enqueued
-		 * subsequently. If urb->actual_length is not DMA-aligned,
-		 * the buffer will then point to an unaligned address, and
-		 * the resulting behavior is undefined. Bail out in that
-		 * situation.
-		 */
-		if (qtd->urb->actual_length >= qtd->urb->length)
-			qtd->error_count = 3;
 		dwc2_hcd_save_data_toggle(hsotg, chan, chnum, qtd);
 		dwc2_halt_channel(hsotg, chan, qtd, DWC2_HC_XFER_XACT_ERR);
 	}
@@ -2065,8 +2056,6 @@ static void dwc2_hc_n_intr(struct dwc2_hsotg *hsotg, int chnum)
 			 hcint, hcintmsk, hcint & hcintmsk);
 	}
 
-	dwc2_writel(hsotg, hcint, HCINT(chnum));
-
 	/*
 	 * If we got an interrupt after someone called
 	 * dwc2_hcd_endpoint_disable() we don't want to crash below
@@ -2078,6 +2067,8 @@ static void dwc2_hc_n_intr(struct dwc2_hsotg *hsotg, int chnum)
 
 	chan->hcint = hcint;
 	hcint &= hcintmsk;
+
+	dwc2_writel(hsotg, hcint, HCINT(chnum));
 
 	/*
 	 * If the channel was halted due to a dequeue, the qtd list might

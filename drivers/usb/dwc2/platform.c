@@ -121,33 +121,10 @@ static int dwc2_get_dr_mode(struct dwc2_hsotg *hsotg)
 	return 0;
 }
 
-static void __dwc2_disable_regulators(void *data)
-{
-	struct dwc2_hsotg *hsotg = data;
-
-	regulator_bulk_disable(ARRAY_SIZE(hsotg->supplies), hsotg->supplies);
-}
-
-static int __dwc2_lowlevel_hw_enable(struct dwc2_hsotg *hsotg)
+static int __dwc2_lowlevel_phy_enable(struct dwc2_hsotg *hsotg)
 {
 	struct platform_device *pdev = to_platform_device(hsotg->dev);
 	int ret;
-
-	ret = regulator_bulk_enable(ARRAY_SIZE(hsotg->supplies),
-				    hsotg->supplies);
-	if (ret)
-		return ret;
-
-	ret = devm_add_action_or_reset(&pdev->dev,
-				       __dwc2_disable_regulators, hsotg);
-	if (ret)
-		return ret;
-
-	if (hsotg->clk) {
-		ret = clk_prepare_enable(hsotg->clk);
-		if (ret)
-			return ret;
-	}
 
 	if (hsotg->uphy) {
 		ret = usb_phy_init(hsotg->uphy);
@@ -158,6 +135,80 @@ static int __dwc2_lowlevel_hw_enable(struct dwc2_hsotg *hsotg)
 		if (ret == 0)
 			ret = phy_init(hsotg->phy);
 	}
+
+	return ret;
+}
+
+/**
+ * dwc2_lowlevel_phy_enable - enable lowlevel PHY resources
+ * @hsotg: The driver state
+ *
+ * A wrapper for platform code responsible for controlling
+ * low-level PHY resources.
+ */
+int dwc2_lowlevel_phy_enable(struct dwc2_hsotg *hsotg)
+{
+	int ret = __dwc2_lowlevel_phy_enable(hsotg);
+
+	if (ret == 0)
+		hsotg->ll_phy_enabled = true;
+	return ret;
+}
+
+static int __dwc2_lowlevel_phy_disable(struct dwc2_hsotg *hsotg)
+{
+	struct platform_device *pdev = to_platform_device(hsotg->dev);
+	int ret = 0;
+
+	if (hsotg->uphy) {
+		usb_phy_shutdown(hsotg->uphy);
+	} else if (hsotg->plat && hsotg->plat->phy_exit) {
+		ret = hsotg->plat->phy_exit(pdev, hsotg->plat->phy_type);
+	} else {
+		ret = phy_exit(hsotg->phy);
+		if (ret == 0)
+			ret = phy_power_off(hsotg->phy);
+	}
+
+	return ret;
+}
+
+/**
+ * dwc2_lowlevel_phy_disable - disable lowlevel PHY resources
+ * @hsotg: The driver state
+ *
+ * A wrapper for platform code responsible for controlling
+ * low-level PHY platform resources.
+ */
+int dwc2_lowlevel_phy_disable(struct dwc2_hsotg *hsotg)
+{
+	int ret = __dwc2_lowlevel_phy_disable(hsotg);
+
+	if (ret == 0)
+		hsotg->ll_phy_enabled = false;
+	return ret;
+}
+
+static int __dwc2_lowlevel_hw_enable(struct dwc2_hsotg *hsotg)
+{
+	int clk, ret;
+
+	ret = regulator_bulk_enable(ARRAY_SIZE(hsotg->supplies),
+				    hsotg->supplies);
+	if (ret)
+		return ret;
+
+	for (clk = 0; clk < DWC2_MAX_CLKS && hsotg->clks[clk]; clk++) {
+		ret = clk_prepare_enable(hsotg->clks[clk]);
+		if (ret) {
+			while (--clk >= 0)
+				clk_disable_unprepare(hsotg->clks[clk]);
+			return ret;
+		}
+	}
+
+	if (!hsotg->ll_phy_enabled)
+		ret = dwc2_lowlevel_phy_enable(hsotg);
 
 	return ret;
 }
@@ -180,25 +231,22 @@ int dwc2_lowlevel_hw_enable(struct dwc2_hsotg *hsotg)
 
 static int __dwc2_lowlevel_hw_disable(struct dwc2_hsotg *hsotg)
 {
-	struct platform_device *pdev = to_platform_device(hsotg->dev);
-	int ret = 0;
+	int clk, ret = 0;
 
-	if (hsotg->uphy) {
-		usb_phy_shutdown(hsotg->uphy);
-	} else if (hsotg->plat && hsotg->plat->phy_exit) {
-		ret = hsotg->plat->phy_exit(pdev, hsotg->plat->phy_type);
-	} else {
-		ret = phy_exit(hsotg->phy);
-		if (ret == 0)
-			ret = phy_power_off(hsotg->phy);
-	}
+	if (hsotg->ll_phy_enabled)
+		ret = dwc2_lowlevel_phy_disable(hsotg);
+
 	if (ret)
 		return ret;
 
-	if (hsotg->clk)
-		clk_disable_unprepare(hsotg->clk);
+	for (clk = DWC2_MAX_CLKS - 1; clk >= 0; clk--)
+		if (hsotg->clks[clk])
+			clk_disable_unprepare(hsotg->clks[clk]);
 
-	return 0;
+	ret = regulator_bulk_disable(ARRAY_SIZE(hsotg->supplies),
+				     hsotg->supplies);
+
+	return ret;
 }
 
 /**
@@ -217,9 +265,17 @@ int dwc2_lowlevel_hw_disable(struct dwc2_hsotg *hsotg)
 	return ret;
 }
 
+/* Only used to reset usb phy at interrupter runtime */
+static void dwc2_reset_phy_work(struct work_struct *data)
+{
+	struct dwc2_hsotg *hsotg = container_of(data, struct dwc2_hsotg,
+			phy_rst_work);
+	phy_reset(hsotg->phy);
+}
+
 static int dwc2_lowlevel_hw_init(struct dwc2_hsotg *hsotg)
 {
-	int i, ret;
+	int i, clk, ret;
 
 	hsotg->reset = devm_reset_control_get_optional(hsotg->dev, "dwc2");
 	if (IS_ERR(hsotg->reset)) {
@@ -238,6 +294,9 @@ static int dwc2_lowlevel_hw_init(struct dwc2_hsotg *hsotg)
 	}
 
 	reset_control_deassert(hsotg->reset_ecc);
+
+	/* Set default UTMI width */
+	hsotg->phyif = GUSBCFG_PHYIF16;
 
 	/*
 	 * Attempt to find a generic PHY, then look for an old style
@@ -258,6 +317,7 @@ static int dwc2_lowlevel_hw_init(struct dwc2_hsotg *hsotg)
 			return ret;
 		}
 	}
+	INIT_WORK(&hsotg->phy_rst_work, dwc2_reset_phy_work);
 
 	if (!hsotg->phy) {
 		hsotg->uphy = devm_usb_get_phy(hsotg->dev, USB_PHY_TYPE_USB2);
@@ -280,11 +340,28 @@ static int dwc2_lowlevel_hw_init(struct dwc2_hsotg *hsotg)
 
 	hsotg->plat = dev_get_platdata(hsotg->dev);
 
-	/* Clock */
-	hsotg->clk = devm_clk_get_optional(hsotg->dev, "otg");
-	if (IS_ERR(hsotg->clk)) {
-		dev_err(hsotg->dev, "cannot get otg clock\n");
-		return PTR_ERR(hsotg->clk);
+	if (hsotg->phy) {
+		/*
+		 * If using the generic PHY framework, check if the PHY bus
+		 * width is 8-bit and set the phyif appropriately.
+		 */
+		if (phy_get_bus_width(hsotg->phy) == 8)
+			hsotg->phyif = GUSBCFG_PHYIF8;
+	}
+
+	for (clk = 0; clk < DWC2_MAX_CLKS; clk++) {
+		hsotg->clks[clk] = of_clk_get(hsotg->dev->of_node, clk);
+		if (IS_ERR(hsotg->clks[clk])) {
+			ret = PTR_ERR(hsotg->clks[clk]);
+			if (ret == -EPROBE_DEFER) {
+				while (--clk >= 0)
+					clk_put(hsotg->clks[clk]);
+				return ret;
+			}
+
+			hsotg->clks[clk] = NULL;
+			break;
+		}
 	}
 
 	/* Regulators */
@@ -294,9 +371,7 @@ static int dwc2_lowlevel_hw_init(struct dwc2_hsotg *hsotg)
 	ret = devm_regulator_bulk_get(hsotg->dev, ARRAY_SIZE(hsotg->supplies),
 				      hsotg->supplies);
 	if (ret) {
-		if (ret != -EPROBE_DEFER)
-			dev_err(hsotg->dev, "failed to request supplies: %d\n",
-				ret);
+		dev_err(hsotg->dev, "failed to request supplies: %d\n", ret);
 		return ret;
 	}
 	return 0;
@@ -316,39 +391,6 @@ static int dwc2_lowlevel_hw_init(struct dwc2_hsotg *hsotg)
 static int dwc2_driver_remove(struct platform_device *dev)
 {
 	struct dwc2_hsotg *hsotg = platform_get_drvdata(dev);
-	struct dwc2_gregs_backup *gr;
-	int ret = 0;
-
-	gr = &hsotg->gr_backup;
-
-	/* Exit Hibernation when driver is removed. */
-	if (hsotg->hibernated) {
-		if (gr->gotgctl & GOTGCTL_CURMODE_HOST)
-			ret = dwc2_exit_hibernation(hsotg, 0, 0, 1);
-		else
-			ret = dwc2_exit_hibernation(hsotg, 0, 0, 0);
-
-		if (ret)
-			dev_err(hsotg->dev,
-				"exit hibernation failed.\n");
-	}
-
-	/* Exit Partial Power Down when driver is removed. */
-	if (hsotg->in_ppd) {
-		ret = dwc2_exit_partial_power_down(hsotg, 0, true);
-		if (ret)
-			dev_err(hsotg->dev,
-				"exit partial_power_down failed\n");
-	}
-
-	/* Exit clock gating when driver is removed. */
-	if (hsotg->params.power_down == DWC2_POWER_DOWN_PARAM_NONE &&
-	    hsotg->bus_suspended) {
-		if (dwc2_is_device_mode(hsotg))
-			dwc2_gadget_exit_clock_gating(hsotg, 0);
-		else
-			dwc2_host_exit_clock_gating(hsotg, 0);
-	}
 
 	dwc2_debugfs_exit(hsotg);
 	if (hsotg->hcd_enabled)
@@ -356,10 +398,8 @@ static int dwc2_driver_remove(struct platform_device *dev)
 	if (hsotg->gadget_enabled)
 		dwc2_hsotg_remove(hsotg);
 
-	dwc2_drd_exit(hsotg);
-
-	if (hsotg->params.activate_stm_id_vb_detection)
-		regulator_disable(hsotg->usb33d);
+	pm_runtime_put_sync(hsotg->dev);
+	pm_runtime_disable(hsotg->dev);
 
 	if (hsotg->ll_hw_enabled)
 		dwc2_lowlevel_hw_disable(hsotg);
@@ -367,7 +407,7 @@ static int dwc2_driver_remove(struct platform_device *dev)
 	reset_control_assert(hsotg->reset);
 	reset_control_assert(hsotg->reset_ecc);
 
-	return ret;
+	return 0;
 }
 
 /**
@@ -408,37 +448,6 @@ static bool dwc2_check_core_endianness(struct dwc2_hsotg *hsotg)
 }
 
 /**
- * dwc2_check_core_version() - Check core version
- *
- * @hsotg: Programming view of the DWC_otg controller
- *
- */
-int dwc2_check_core_version(struct dwc2_hsotg *hsotg)
-{
-	struct dwc2_hw_params *hw = &hsotg->hw_params;
-
-	/*
-	 * Attempt to ensure this device is really a DWC_otg Controller.
-	 * Read and verify the GSNPSID register contents. The value should be
-	 * 0x45f4xxxx, 0x5531xxxx or 0x5532xxxx
-	 */
-
-	hw->snpsid = dwc2_readl(hsotg, GSNPSID);
-	if ((hw->snpsid & GSNPSID_ID_MASK) != DWC2_OTG_ID &&
-	    (hw->snpsid & GSNPSID_ID_MASK) != DWC2_FS_IOT_ID &&
-	    (hw->snpsid & GSNPSID_ID_MASK) != DWC2_HS_IOT_ID) {
-		dev_err(hsotg->dev, "Bad value for GSNPSID: 0x%08x\n",
-			hw->snpsid);
-		return -ENODEV;
-	}
-
-	dev_dbg(hsotg->dev, "Core Release: %1x.%1x%1x%1x (snpsid=%x)\n",
-		hw->snpsid >> 12 & 0xf, hw->snpsid >> 8 & 0xf,
-		hw->snpsid >> 4 & 0xf, hw->snpsid & 0xf, hw->snpsid);
-	return 0;
-}
-
-/**
  * dwc2_driver_probe() - Called when the DWC_otg core is bound to the DWC_otg
  * driver
  *
@@ -473,7 +482,8 @@ static int dwc2_driver_probe(struct platform_device *dev)
 		return retval;
 	}
 
-	hsotg->regs = devm_platform_get_and_ioremap_resource(dev, 0, &res);
+	res = platform_get_resource(dev, IORESOURCE_MEM, 0);
+	hsotg->regs = devm_ioremap_resource(&dev->dev, res);
 	if (IS_ERR(hsotg->regs))
 		return PTR_ERR(hsotg->regs);
 
@@ -487,8 +497,10 @@ static int dwc2_driver_probe(struct platform_device *dev)
 	spin_lock_init(&hsotg->lock);
 
 	hsotg->irq = platform_get_irq(dev, 0);
-	if (hsotg->irq < 0)
+	if (hsotg->irq < 0) {
+		dev_err(&dev->dev, "missing IRQ resource\n");
 		return hsotg->irq;
+	}
 
 	dev_dbg(hsotg->dev, "registering common handler for irq%d\n",
 		hsotg->irq);
@@ -498,33 +510,18 @@ static int dwc2_driver_probe(struct platform_device *dev)
 	if (retval)
 		return retval;
 
-	hsotg->vbus_supply = devm_regulator_get_optional(hsotg->dev, "vbus");
-	if (IS_ERR(hsotg->vbus_supply)) {
-		retval = PTR_ERR(hsotg->vbus_supply);
-		hsotg->vbus_supply = NULL;
-		if (retval != -ENODEV)
-			return retval;
-	}
-
 	retval = dwc2_lowlevel_hw_enable(hsotg);
 	if (retval)
 		return retval;
 
 	hsotg->needs_byte_swap = dwc2_check_core_endianness(hsotg);
 
-	retval = dwc2_get_dr_mode(hsotg);
-	if (retval)
+	pm_runtime_enable(hsotg->dev);
+	retval = pm_runtime_get_sync(hsotg->dev);
+	if (retval < 0)
 		goto error;
 
-	hsotg->need_phy_for_wake =
-		of_property_read_bool(dev->dev.of_node,
-				      "snps,need-phy-for-wake");
-
-	/*
-	 * Before performing any core related operations
-	 * check core version.
-	 */
-	retval = dwc2_check_core_version(hsotg);
+	retval = dwc2_get_dr_mode(hsotg);
 	if (retval)
 		goto error;
 
@@ -552,60 +549,11 @@ static int dwc2_driver_probe(struct platform_device *dev)
 	if (retval)
 		goto error;
 
-	if (hsotg->params.activate_stm_id_vb_detection) {
-		u32 ggpio;
-
-		hsotg->usb33d = devm_regulator_get(hsotg->dev, "usb33d");
-		if (IS_ERR(hsotg->usb33d)) {
-			retval = PTR_ERR(hsotg->usb33d);
-			if (retval != -EPROBE_DEFER)
-				dev_err(hsotg->dev,
-					"failed to request usb33d supply: %d\n",
-					retval);
-			goto error;
-		}
-		retval = regulator_enable(hsotg->usb33d);
-		if (retval) {
-			dev_err(hsotg->dev,
-				"failed to enable usb33d supply: %d\n", retval);
-			goto error;
-		}
-
-		ggpio = dwc2_readl(hsotg, GGPIO);
-		ggpio |= GGPIO_STM32_OTG_GCCFG_IDEN;
-		ggpio |= GGPIO_STM32_OTG_GCCFG_VBDEN;
-		dwc2_writel(hsotg, ggpio, GGPIO);
-	}
-
-	retval = dwc2_drd_init(hsotg);
-	if (retval) {
-		if (retval != -EPROBE_DEFER)
-			dev_err(hsotg->dev, "failed to initialize dual-role\n");
-		goto error_init;
-	}
-
 	if (hsotg->dr_mode != USB_DR_MODE_HOST) {
 		retval = dwc2_gadget_init(hsotg);
 		if (retval)
-			goto error_drd;
+			goto error;
 		hsotg->gadget_enabled = 1;
-	}
-
-	/*
-	 * If we need PHY for wakeup we must be wakeup capable.
-	 * When we have a device that can wake without the PHY we
-	 * can adjust this condition.
-	 */
-	if (hsotg->need_phy_for_wake)
-		device_set_wakeup_capable(&dev->dev, true);
-
-	hsotg->reset_phy_on_wake =
-		of_property_read_bool(dev->dev.of_node,
-				      "snps,reset-phy-on-wake");
-	if (hsotg->reset_phy_on_wake && !hsotg->phy) {
-		dev_warn(hsotg->dev,
-			 "Quirk reset-phy-on-wake only supports generic PHYs\n");
-		hsotg->reset_phy_on_wake = false;
 	}
 
 	if (hsotg->dr_mode != USB_DR_MODE_PERIPHERAL) {
@@ -613,7 +561,7 @@ static int dwc2_driver_probe(struct platform_device *dev)
 		if (retval) {
 			if (hsotg->gadget_enabled)
 				dwc2_hsotg_remove(hsotg);
-			goto error_drd;
+			goto error;
 		}
 		hsotg->hcd_enabled = 1;
 	}
@@ -627,6 +575,11 @@ static int dwc2_driver_probe(struct platform_device *dev)
 	if (hsotg->dr_mode == USB_DR_MODE_PERIPHERAL)
 		dwc2_lowlevel_hw_disable(hsotg);
 
+	if (hsotg->dr_mode == USB_DR_MODE_OTG && dwc2_is_device_mode(hsotg)) {
+		if (hsotg->ll_phy_enabled)
+			dwc2_lowlevel_phy_disable(hsotg);
+	}
+
 #if IS_ENABLED(CONFIG_USB_DWC2_PERIPHERAL) || \
 	IS_ENABLED(CONFIG_USB_DWC2_DUAL_ROLE)
 	/* Postponed adding a new gadget to the udc class driver list */
@@ -635,26 +588,15 @@ static int dwc2_driver_probe(struct platform_device *dev)
 		if (retval) {
 			hsotg->gadget.udc = NULL;
 			dwc2_hsotg_remove(hsotg);
-			goto error_debugfs;
+			goto error;
 		}
 	}
 #endif /* CONFIG_USB_DWC2_PERIPHERAL || CONFIG_USB_DWC2_DUAL_ROLE */
 	return 0;
 
-#if IS_ENABLED(CONFIG_USB_DWC2_PERIPHERAL) || \
-	IS_ENABLED(CONFIG_USB_DWC2_DUAL_ROLE)
-error_debugfs:
-	dwc2_debugfs_exit(hsotg);
-	if (hsotg->hcd_enabled)
-		dwc2_hcd_remove(hsotg);
-#endif
-error_drd:
-	dwc2_drd_exit(hsotg);
-
-error_init:
-	if (hsotg->params.activate_stm_id_vb_detection)
-		regulator_disable(hsotg->usb33d);
 error:
+	pm_runtime_put_sync(hsotg->dev);
+	pm_runtime_disable(hsotg->dev);
 	if (hsotg->dr_mode != USB_DR_MODE_PERIPHERAL)
 		dwc2_lowlevel_hw_disable(hsotg);
 	return retval;
@@ -663,50 +605,13 @@ error:
 static int __maybe_unused dwc2_suspend(struct device *dev)
 {
 	struct dwc2_hsotg *dwc2 = dev_get_drvdata(dev);
-	bool is_device_mode = dwc2_is_device_mode(dwc2);
 	int ret = 0;
 
-	if (is_device_mode)
+	if (dwc2_is_device_mode(dwc2))
 		dwc2_hsotg_suspend(dwc2);
 
-	dwc2_drd_suspend(dwc2);
-
-	if (dwc2->params.activate_stm_id_vb_detection) {
-		unsigned long flags;
-		u32 ggpio, gotgctl;
-
-		/*
-		 * Need to force the mode to the current mode to avoid Mode
-		 * Mismatch Interrupt when ID detection will be disabled.
-		 */
-		dwc2_force_mode(dwc2, !is_device_mode);
-
-		spin_lock_irqsave(&dwc2->lock, flags);
-		gotgctl = dwc2_readl(dwc2, GOTGCTL);
-		/* bypass debounce filter, enable overrides */
-		gotgctl |= GOTGCTL_DBNCE_FLTR_BYPASS;
-		gotgctl |= GOTGCTL_BVALOEN | GOTGCTL_AVALOEN;
-		/* Force A / B session if needed */
-		if (gotgctl & GOTGCTL_ASESVLD)
-			gotgctl |= GOTGCTL_AVALOVAL;
-		if (gotgctl & GOTGCTL_BSESVLD)
-			gotgctl |= GOTGCTL_BVALOVAL;
-		dwc2_writel(dwc2, gotgctl, GOTGCTL);
-		spin_unlock_irqrestore(&dwc2->lock, flags);
-
-		ggpio = dwc2_readl(dwc2, GGPIO);
-		ggpio &= ~GGPIO_STM32_OTG_GCCFG_IDEN;
-		ggpio &= ~GGPIO_STM32_OTG_GCCFG_VBDEN;
-		dwc2_writel(dwc2, ggpio, GGPIO);
-
-		regulator_disable(dwc2->usb33d);
-	}
-
-	if (dwc2->ll_hw_enabled &&
-	    (is_device_mode || dwc2_host_can_poweroff_phy(dwc2))) {
+	if (dwc2->ll_hw_enabled)
 		ret = __dwc2_lowlevel_hw_disable(dwc2);
-		dwc2->phy_off_for_suspend = true;
-	}
 
 	return ret;
 }
@@ -714,44 +619,25 @@ static int __maybe_unused dwc2_suspend(struct device *dev)
 static int __maybe_unused dwc2_resume(struct device *dev)
 {
 	struct dwc2_hsotg *dwc2 = dev_get_drvdata(dev);
+	unsigned long flags;
 	int ret = 0;
 
-	if (dwc2->phy_off_for_suspend && dwc2->ll_hw_enabled) {
+	if (dwc2->ll_hw_enabled) {
 		ret = __dwc2_lowlevel_hw_enable(dwc2);
 		if (ret)
 			return ret;
 	}
-	dwc2->phy_off_for_suspend = false;
 
-	if (dwc2->params.activate_stm_id_vb_detection) {
-		unsigned long flags;
-		u32 ggpio, gotgctl;
-
-		ret = regulator_enable(dwc2->usb33d);
-		if (ret)
-			return ret;
-
-		ggpio = dwc2_readl(dwc2, GGPIO);
-		ggpio |= GGPIO_STM32_OTG_GCCFG_IDEN;
-		ggpio |= GGPIO_STM32_OTG_GCCFG_VBDEN;
-		dwc2_writel(dwc2, ggpio, GGPIO);
-
-		/* ID/VBUS detection startup time */
-		usleep_range(5000, 7000);
-
+	/* Stop hcd if dr_mode is host and PD is power off when suspend */
+	if (dwc2->op_state == OTG_STATE_A_HOST && dwc2_is_device_mode(dwc2)) {
 		spin_lock_irqsave(&dwc2->lock, flags);
-		gotgctl = dwc2_readl(dwc2, GOTGCTL);
-		gotgctl &= ~GOTGCTL_DBNCE_FLTR_BYPASS;
-		gotgctl &= ~(GOTGCTL_BVALOEN | GOTGCTL_AVALOEN |
-			     GOTGCTL_BVALOVAL | GOTGCTL_AVALOVAL);
-		dwc2_writel(dwc2, gotgctl, GOTGCTL);
+		dwc2_hcd_disconnect(dwc2, true);
+		dwc2->op_state = OTG_STATE_B_PERIPHERAL;
+		dwc2->lx_state = DWC2_L3;
+		if (!dwc2->driver)
+			dwc2_hsotg_core_init_disconnected(dwc2, false);
 		spin_unlock_irqrestore(&dwc2->lock, flags);
 	}
-
-	/* Need to restore FORCEDEVMODE/FORCEHOSTMODE */
-	dwc2_force_dr_mode(dwc2);
-
-	dwc2_drd_resume(dwc2);
 
 	if (dwc2_is_device_mode(dwc2))
 		ret = dwc2_hsotg_resume(dwc2);
@@ -767,7 +653,6 @@ static struct platform_driver dwc2_platform_driver = {
 	.driver = {
 		.name = dwc2_driver_name,
 		.of_match_table = dwc2_of_match_table,
-		.acpi_match_table = ACPI_PTR(dwc2_acpi_match),
 		.pm = &dwc2_dev_pm_ops,
 	},
 	.probe = dwc2_driver_probe,
@@ -776,3 +661,7 @@ static struct platform_driver dwc2_platform_driver = {
 };
 
 module_platform_driver(dwc2_platform_driver);
+
+MODULE_DESCRIPTION("DESIGNWARE HS OTG Platform Glue");
+MODULE_AUTHOR("Matthijs Kooijman <matthijs@stdin.nl>");
+MODULE_LICENSE("Dual BSD/GPL");
