@@ -197,7 +197,8 @@ static int smartcross_dac_probe(struct platform_device *pdev)
 	i2c_node = of_parse_phandle(pdev->dev.of_node, "i2c-bus", 0);
 	if (!i2c_node) {
 		dev_err(&pdev->dev, "Failed to find i2c node in device tree\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto fail_ret;
 	}
 
 	priv_data->adapter = of_find_i2c_adapter_by_node(i2c_node);
@@ -205,7 +206,8 @@ static int smartcross_dac_probe(struct platform_device *pdev)
 	if (!priv_data->adapter) {
 		dev_err(&pdev->dev,
 			"Failed to get i2c adapter by node\n");
-		return -EPROBE_DEFER;
+		ret = -EPROBE_DEFER;
+		goto fail_ret;
 	}
 
 	priv_data->enable_gpio =
@@ -214,7 +216,7 @@ static int smartcross_dac_probe(struct platform_device *pdev)
 		ret = PTR_ERR(priv_data->enable_gpio);
 		dev_err(&pdev->dev,
 			"Failed to get enable gpio line: %d\n", ret);
-		return ret;
+		goto fail_i2c;
 	}
 
 	priv_data->mute_gpio =
@@ -223,7 +225,7 @@ static int smartcross_dac_probe(struct platform_device *pdev)
 		ret = PTR_ERR(priv_data->mute_gpio);
 		dev_err(&pdev->dev,
 			"Failed to get mute gpio line: %d\n", ret);
-		return ret;
+		goto fail_i2c;
 	}
 
 	priv_data->default_pmp = 2;
@@ -231,6 +233,8 @@ static int smartcross_dac_probe(struct platform_device *pdev)
 				  &val)) {
 		if ((val >= 0) && (val <= 4))
 			priv_data->default_pmp = val;
+		else
+			dev_warn(&pdev->dev, "Wrong default-pmp value: %d\n", val);
 	}
 
 	// set to a low volume (10%)
@@ -246,11 +250,6 @@ static int smartcross_dac_probe(struct platform_device *pdev)
 	gpiod_set_value_cansleep(priv_data->enable_gpio, 1);
 	msleep(2);
 
-	/* Probe for output modules.
-	 * We need to be as quick as possible, becaues cs4398
-	 * should be probed within approx. 10ms, or else it will
-	 * go to standalone mode.
-	 */
 	cnt = 0;
 	for (i = 0; i < NUMBER_OF_CHIPS; i++) {
 		if (smartcross_ma120x0p_initialize_driver(pdev, &dai_drivers[i], i) >= 0) {
@@ -264,19 +263,29 @@ static int smartcross_dac_probe(struct platform_device *pdev)
 		}
 
 		ret = smartcross_null_initialize_driver(pdev, &dai_drivers[i], i);
-		if (ret)
-			return ret;
+		if (ret < 0)
+			goto fail_i2c;
 	}
 
 	if (cnt == 0) {
 		dev_err(&pdev->dev, "No SmartCross output modules are detected.\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto fail_i2c;
 	} else {
 		dev_info(&pdev->dev, "A total of %d SmartCross output modules are present\n", cnt);
 	}
 
 	ret = devm_snd_soc_register_component(
 		&pdev->dev, &smartcross_dac_codec_driver, dai_drivers, NUMBER_OF_CHIPS);
+	if (ret < 0)
+		goto fail_i2c;
+
+	return 0;
+
+fail_i2c:
+	i2c_put_adapter(priv_data->adapter);
+
+fail_ret:
 	return ret;
 }
 
