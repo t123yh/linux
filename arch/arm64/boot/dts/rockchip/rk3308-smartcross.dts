@@ -18,6 +18,7 @@
 
 	aliases {
 		mmc0 = &emmc;
+		serial0 = &uart0;
 	};
 
 	vdd_core: vdd-core {
@@ -33,92 +34,10 @@
 		status = "okay";
 	};
 
-	vdd_log: vdd-log {
-		compatible = "regulator-fixed";
-		regulator-name = "vdd_log";
-		regulator-always-on;
-		regulator-boot-on;
-		regulator-min-microvolt = <1050000>;
-		regulator-max-microvolt = <1050000>;
-	};
-
-	vdd_1v0: vdd-1v0 {
-		compatible = "regulator-fixed";
-		regulator-name = "vdd_1v0";
-		regulator-always-on;
-		regulator-boot-on;
-		regulator-min-microvolt = <1000000>;
-		regulator-max-microvolt = <1000000>;
-	};
-
-	vccio_sdio: vcc_1v8: vcc-1v8 {
-		compatible = "regulator-fixed";
-		regulator-name = "vcc_1v8";
-		regulator-always-on;
-		regulator-boot-on;
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <1800000>;
-		vin-supply = <&vcc_io>;
-	};
-
-	vccio_sd: vccio-sd {
-		compatible = "regulator-gpio";
-		regulator-name = "vccio_sd";
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <3300000>;
-		states = <1800000 0x0
-			  3300000 0x1>;
-	};
-
-	vcc_sd: vcc-sd {
-		compatible = "regulator-fixed";
-		gpio = <&gpio4 RK_PD6 GPIO_ACTIVE_LOW>;
-		regulator-name = "vcc_sd";
-		regulator-min-microvolt = <3300000>;
-		regulator-max-microvolt = <3300000>;
-	};
-
-	vcc_1v8_codec: vcc-1v8-codec {
-		compatible = "regulator-fixed";
-		regulator-name = "vcc_1v8_codec";
-		regulator-always-on;
-		regulator-boot-on;
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <1800000>;
-		vin-supply = <&vcc_io>;
-	};
-
-	vcc_ddr: vcc-ddr {
-		compatible = "regulator-fixed";
-		regulator-name = "vcc_ddr";
-		regulator-always-on;
-		regulator-boot-on;
-		regulator-min-microvolt = <1500000>;
-		regulator-max-microvolt = <1500000>;
-	};
-
-	vcc_3v3_codec: vcc_io: vcc-io {
-		compatible = "regulator-fixed";
-		regulator-name = "vcc_io";
-		regulator-always-on;
-		regulator-boot-on;
-		regulator-min-microvolt = <3300000>;
-		regulator-max-microvolt = <3300000>;
-	};
-
-	vccio_flash: vccio-flash {
-		compatible = "regulator-fixed";
-		regulator-name = "vccio_flash";
-		regulator-always-on;
-		regulator-boot-on;
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <1800000>;
-	};
-
 	vcc_host_vbus: host-vbus-regulator {
 		compatible = "regulator-fixed";
 		enable-active-high;
-		gpio = <&gpio1 RK_PC5 GPIO_ACTIVE_HIGH>;
+		gpio = <&gpio0 RK_PC5 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&host_vbus_drv>;
 		regulator-name = "vcc_host_vbus";
@@ -130,25 +49,21 @@
 		compatible = "gpio-leds";
 		status = "okay";
 
-		green-led {
-			label = "rockpis:green:power";
-			gpios = <&gpio1 RK_PC2 GPIO_ACTIVE_HIGH>;
-			linux,default-trigger = "default-on";
-			default-state = "on";
-		};
-
-		blue-led {
-			label = "rockpis:blue:user";
+		status-led {
+			label = "smartcross:blue:status";
 			gpios = <&gpio1 RK_PC4 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "heartbeat";
 			default-state = "on";
 		};
 	};
 
-	output-sound {
+	sound-output {
 		status = "okay";
 		compatible = "simple-audio-card";
-		simple-audio-card,name = "SmartCross-Output";
+		simple-audio-card,name = "SmartCross";
+
+		#address-cells = <1>;
+		#size-cells = <0>;
 
         simple-audio-card,dai-link@0 {
             reg = <0>;
@@ -192,10 +107,10 @@
         };
 	};
 
-	spdif-rx-sound {
+	sound-spdif-rx {
 		status = "okay";
 		compatible = "simple-audio-card";
-		simple-audio-card,name = "rockchip,spdif-rx-sound";
+		simple-audio-card,name = "SPDIFReceiver";
 		simple-audio-card,cpu {
 			sound-dai = <&spdif_rx>;
 		};
@@ -220,7 +135,7 @@
 		ma120x0p,default-pmp = <2>;
 	};
 	
-	i2s_clk: fixed-24576 {
+	i2s_mclk: fixed-24576 {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
 		clock-frequency = <24576000>;
@@ -250,13 +165,11 @@
 				&i2s_8ch_0_mclk
 				&i2s_8ch_0_sdo3>;
 
-	rockchip,mclk-input;
 	clocks = <&cru SCLK_I2S0_8CH_TX>, <&cru SCLK_I2S0_8CH_RX>, <&cru HCLK_I2S0_8CH>;
 	clock-names = "mclk_tx", "mclk_rx", "hclk";
-	/delete-property/ rockchip,mclk-calibrate;
 
 	assigned-clocks = <&cru SCLK_I2S0_8CH_TX_MUX>;
-	assigned-clock-parents = <&i2s_clk>;
+	assigned-clock-parents = <&i2s_mclk>;
 
 	status = "okay";
 };
@@ -305,30 +218,14 @@
 	status = "okay";
 };
 
-&io_domains {
-	status = "okay";
-
-	vccio0-supply = <&vcc_io>;
-	vccio1-supply = <&vcc_io>;
-	vccio2-supply = <&vcc_1v8>;
-	vccio3-supply = <&vccio_flash>;
-	vccio4-supply = <&vccio_sdio>;
-	vccio5-supply = <&vcc_io>;
-};
-
 &pinctrl {
 	pinctrl-names = "default";
-	pinctrl-0 = <&rtc_32k>;
 
 	usb {
-		otg_vbus_drv: otg-vbus-drv {
+		host_vbus_drv: host-vbus-drv {
 			rockchip,pins = <0 RK_PC5 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
-		host_vbus_drv: host-vbus-drv {
-			rockchip,pins = <1 RK_PA2 RK_FUNC_GPIO &pcfg_pull_none>;
-		};
 	};
-
 };
 
 &pwm0 {
