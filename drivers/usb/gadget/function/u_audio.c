@@ -1115,21 +1115,21 @@ static int u_audio_rate_get(struct snd_kcontrol *kcontrol,
 }
 
 static struct snd_kcontrol_new u_audio_controls[]  = {
-  [UAC_FBACK_CTRL] {
-    .iface =        SNDRV_CTL_ELEM_IFACE_PCM,
-    .name =         "Capture Pitch 1000000",
-    .info =         u_audio_pitch_info,
-    .get =          u_audio_pitch_get,
-    .put =          u_audio_pitch_put,
-  },
-	[UAC_P_PITCH_CTRL] {
-		.iface =        SNDRV_CTL_ELEM_IFACE_PCM,
-		.name =         "Playback Pitch 1000000",
-		.info =         u_audio_pitch_info,
-		.get =          u_audio_pitch_get,
-		.put =          u_audio_pitch_put,
+	[UAC_FBACK_CTRL] {
+		.iface =	SNDRV_CTL_ELEM_IFACE_PCM,
+		.name =		"Capture Pitch 1000000",
+		.info =		u_audio_pitch_info,
+		.get =		u_audio_pitch_get,
+		.put =		u_audio_pitch_put,
 	},
-  [UAC_MUTE_CTRL] {
+	[UAC_P_PITCH_CTRL] {
+		.iface =	SNDRV_CTL_ELEM_IFACE_PCM,
+		.name =		"Playback Pitch 1000000",
+		.info =		u_audio_pitch_info,
+		.get =		u_audio_pitch_get,
+		.put =		u_audio_pitch_put,
+	},
+	[UAC_MUTE_CTRL] {
 		.iface =	SNDRV_CTL_ELEM_IFACE_MIXER,
 		.name =		"", /* will be filled later */
 		.info =		u_audio_mute_info,
@@ -1179,8 +1179,8 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 	if (c_chmask) {
 		struct uac_rtd_params *prm = &uac->c_prm;
 
-    spin_lock_init(&prm->lock);
-    uac->c_prm.uac = uac;
+		spin_lock_init(&prm->lock);
+		uac->c_prm.uac = uac;
 		prm->max_psize = g_audio->out_ep_maxpsize;
 		prm->srate = params->c_srates[0];
 
