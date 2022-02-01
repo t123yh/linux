@@ -612,7 +612,7 @@ static irqreturn_t rk_spdifrx_isr(int irq, void *dev_id)
 	}
 
 	if (err && spdifrx->substream)
-		snd_pcm_stop(spdifrx->substream, SNDRV_PCM_STATE_DISCONNECTED);
+		snd_pcm_stop(spdifrx->substream, SNDRV_PCM_STATE_DRAINING);
 
 	if (xrun_err && spdifrx->substream)
 		snd_pcm_stop_xrun(spdifrx->substream);
