@@ -27,6 +27,7 @@ struct rk_spdifrx_dev {
 	struct snd_kcontrol *snd_kctl_chstat;
 	struct snd_kcontrol *snd_kctl_chstat_mask;
 	struct snd_kcontrol *snd_kctl_usr;
+	struct snd_kcontrol *snd_kctl_reset;
 	/* Prevent race condition on stream state */
 	spinlock_t irq_lock;
 
@@ -49,8 +50,7 @@ static int rk_spdifrx_hw_params(struct snd_pcm_substream *substream,
 	int current_rate = rk_spdifrx_get_rate(spdifrx);
 	int requested_rate = params_rate(params);
 	if (params_rate(params) != current_rate) {
-		dev_err(spdifrx->dev, "SPDIF rate mismatch: requested %dHz, actual %dHz\n", requested_rate, current_rate);
-		return -EINVAL;
+		dev_warn(spdifrx->dev, "rate mismatch: requested %dHz, actual %dHz\n", requested_rate, current_rate);
 	}
 	return 0;
 }
@@ -98,9 +98,6 @@ static int rk_spdifrx_trigger(struct snd_pcm_substream *substream, int cmd,
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
-		/* Reset receiving clock */
-		rk_spdifrx_reset(spdifrx);
-
 		/* Clear interrupts before enabling them */
 		regmap_write(spdifrx->regmap, SPDIFRX_INTCLR, irqs);
 		regmap_update_bits(spdifrx->regmap, SPDIFRX_INTEN, irqs, irqs);
@@ -218,6 +215,38 @@ static int rk_spdifrx_rate_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int rk_spdifrx_reset_info(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BOOLEAN;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 1;
+	return 0;
+}
+
+static int rk_spdifrx_reset_get(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_dai *dai = snd_kcontrol_chip(kcontrol);
+	struct rk_spdifrx_dev *spdifrx = snd_soc_dai_get_drvdata(dai);
+
+	ucontrol->value.integer.value[0] = 0;
+	return 0;
+}
+
+static int rk_spdifrx_reset_put(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_dai *dai = snd_kcontrol_chip(kcontrol);
+	struct rk_spdifrx_dev *spdifrx = snd_soc_dai_get_drvdata(dai);
+
+	if (ucontrol->value.integer.value[0]) {
+		rk_spdifrx_reset(spdifrx);
+	}
+	return 0;
+}
+
 static int rk_spdifrx_sync_info(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_info *uinfo)
 {
@@ -325,6 +354,23 @@ static int rk_spdifrx_dai_probe(struct snd_soc_dai *dai)
 	};
 	spdifrx->snd_kctl_chstat_mask = snd_ctl_new1(&control, dai);
 
+	/* The reset control is used to perform a reset on 
+	 * the receiver clock domain. This is a workaround
+	 * necessary in some situations, notably when hot-
+	 * plugging SPDIF cable, on which the sample rate
+	 * detection feature will break.
+	 */
+	control = (struct snd_kcontrol_new){
+		/* Receiver Clock Reset */
+		.iface = SNDRV_CTL_ELEM_IFACE_PCM,
+		.name = "Receiver Clock Reset",
+		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE | SNDRV_CTL_ELEM_ACCESS_VOLATILE,
+		.info = rk_spdifrx_reset_info,
+		.get = rk_spdifrx_reset_get,
+		.put = rk_spdifrx_reset_put,
+	};
+	spdifrx->snd_kctl_reset = snd_ctl_new1(&control, dai);
+
 	spdifrx->dai = dai;
 
 	ret = snd_ctl_add(card, spdifrx->snd_kctl_rate);
@@ -356,6 +402,13 @@ static int rk_spdifrx_dai_probe(struct snd_soc_dai *dai)
 	ret = snd_ctl_add(card, spdifrx->snd_kctl_usr);
 	if (ret < 0) {
 		dev_err(spdifrx->dev, "Failed to add user bits control: %d\n",
+			ret);
+		return ret;
+	}
+
+	ret = snd_ctl_add(card, spdifrx->snd_kctl_reset);
+	if (ret < 0) {
+		dev_err(spdifrx->dev, "Failed to add reset control: %d\n",
 			ret);
 		return ret;
 	}
