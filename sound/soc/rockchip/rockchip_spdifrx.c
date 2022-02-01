@@ -517,6 +517,10 @@ static irqreturn_t rk_spdifrx_isr(int irq, void *dev_id)
 		err = true;
 	}
 
+	if (intsr & SPDIFRX_INT_ESYNC) {
+		sync_changed = true;
+	}
+
 	if (intsr & SPDIFRX_INT_BMDE) {
 		dev_warn(spdifrx->dev, "Biphase mark decoding error\n");
 		err = true;
