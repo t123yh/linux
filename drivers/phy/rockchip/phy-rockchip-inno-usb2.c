@@ -32,6 +32,8 @@
 #define SCHEDULE_DELAY		(60 * HZ)
 #define OTG_SCHEDULE_DELAY	(2 * HZ)
 
+struct rockchip_usb2phy;
+
 enum rockchip_usb2phy_port_id {
 	USB2PHY_PORT_OTG,
 	USB2PHY_PORT_HOST,
@@ -149,6 +151,7 @@ struct rockchip_usb2phy_port_cfg {
 struct rockchip_usb2phy_cfg {
 	unsigned int	reg;
 	unsigned int	num_ports;
+	int (*phy_tuning)(struct rockchip_usb2phy *);
 	struct usb2phy_reg	clkout_ctl;
 	const struct rockchip_usb2phy_port_cfg	port_cfgs[USB2PHY_NUM_PORTS];
 	const struct rockchip_chg_det_reg	chg_det;
@@ -1145,6 +1148,12 @@ static int rockchip_usb2phy_probe(struct platform_device *pdev)
 		goto disable_clks;
 	}
 
+	if (rphy->phy_cfg->phy_tuning) {
+		ret = rphy->phy_cfg->phy_tuning(rphy);
+		if (ret)
+			goto disable_clks;
+	}
+
 	index = 0;
 	for_each_available_child_of_node(np, child_np) {
 		struct rockchip_usb2phy_port *rport = &rphy->ports[index];
@@ -1197,6 +1206,23 @@ disable_clks:
 		clk_put(rphy->clk);
 	}
 	return ret;
+}
+
+static int rk3308_usb2phy_tuning(struct rockchip_usb2phy *rphy)
+{
+	int ret;
+
+	/* Open pre-emphasize in non-chirp state for otg port */
+	ret = regmap_write(rphy->grf, 0x0, 0x00070004);
+	if (ret)
+		return ret;
+
+	/* Open pre-emphasize in non-chirp state for host port */
+	ret = regmap_write(rphy->grf, 0x30, 0x00070004);
+	if (ret)
+		return ret;
+
+	return 0;
 }
 
 static const struct rockchip_usb2phy_cfg rk3228_phy_cfgs[] = {
@@ -1262,6 +1288,7 @@ static const struct rockchip_usb2phy_cfg rk3308_phy_cfgs[] = {
 	{
 		.reg = 0x100,
 		.num_ports	= 2,
+		.phy_tuning	= rk3308_usb2phy_tuning,
 		.clkout_ctl	= { 0x108, 4, 4, 1, 0 },
 		.port_cfgs	= {
 			[USB2PHY_PORT_OTG] = {
