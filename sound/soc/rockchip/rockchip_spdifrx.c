@@ -110,6 +110,7 @@ static int rk_spdifrx_trigger(struct snd_pcm_substream *substream, int cmd,
 				   SPDIFRX_DMACR_RDE_ENABLE);
 		spdifrx->start_jiffies = jiffies;
 
+		printk("FUCK\n");
 		break;
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_STOP:
@@ -584,28 +585,30 @@ static irqreturn_t rk_spdifrx_isr(int irq, void *dev_id)
 		sync_changed = true;
 	}
 
+/*
 	if (intsr & SPDIFRX_INT_BMDE) {
 		if (ignore_initial_error) {
 			dev_warn(spdifrx->dev, "Biphase mark decoding error (ignored!)\n");
 		} else {
 			dev_warn(spdifrx->dev, "Biphase mark decoding error\n");
-			err = true;
 		}
 	}
+*/
 
 	if (intsr & SPDIFRX_INT_PE) {
 		dev_warn(spdifrx->dev, "Parity error\n");
 		err = true;
 	}
 
+/*
 	if (intsr & SPDIFRX_INT_RXO) {
 		if (ignore_initial_error) {
 			dev_warn(spdifrx->dev, "FIFO overrun error (ignored!)\n");
 		} else {
 			dev_warn(spdifrx->dev, "FIFO overrun error\n");
-			xrun_err = true;
 		}
 	}
+*/
 
 	/* clear all handled interrupts */
 	regmap_write(spdifrx->regmap, SPDIFRX_INTCLR, intsr);
