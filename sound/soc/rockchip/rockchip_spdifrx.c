@@ -14,6 +14,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
+#include <linux/jiffies.h>
 #include <sound/pcm_params.h>
 #include <sound/dmaengine_pcm.h>
 
@@ -38,6 +39,8 @@ struct rk_spdifrx_dev {
 	struct regmap *regmap;
 	struct reset_control *reset;
 	int irq;
+
+	unsigned long start_jiffies;
 };
 
 static int rk_spdifrx_get_rate(const struct rk_spdifrx_dev *spdifrx);
@@ -105,6 +108,7 @@ static int rk_spdifrx_trigger(struct snd_pcm_substream *substream, int cmd,
 		regmap_update_bits(spdifrx->regmap, SPDIFRX_DMACR,
 				   SPDIFRX_DMACR_RDE_MASK,
 				   SPDIFRX_DMACR_RDE_ENABLE);
+		spdifrx->start_jiffies = jiffies;
 
 		break;
 	case SNDRV_PCM_TRIGGER_SUSPEND:
@@ -559,6 +563,11 @@ static irqreturn_t rk_spdifrx_isr(int irq, void *dev_id)
 	bool sync_changed = false, err = false, xrun_err = false;
 	u32 intsr;
 
+	/* sometimes UNDERRUN and BMDE will happen when starting capture,
+	 * so ignore them if current time is within 3ms after start
+	 */
+	bool ignore_initial_error = jiffies_to_usecs(jiffies - spdifrx->start_jiffies) < 3000;
+
 	regmap_read(spdifrx->regmap, SPDIFRX_INTSR, &intsr);
 
 	if (!intsr)
@@ -571,12 +580,17 @@ static irqreturn_t rk_spdifrx_isr(int irq, void *dev_id)
 	}
 
 	if (intsr & SPDIFRX_INT_ESYNC) {
+		dev_dbg(spdifrx->dev, "Entering sync status\n");
 		sync_changed = true;
 	}
 
 	if (intsr & SPDIFRX_INT_BMDE) {
-		dev_warn(spdifrx->dev, "Biphase mark decoding error\n");
-		err = true;
+		if (ignore_initial_error) {
+			dev_warn(spdifrx->dev, "Biphase mark decoding error (ignored!)\n");
+		} else {
+			dev_warn(spdifrx->dev, "Biphase mark decoding error\n");
+			err = true;
+		}
 	}
 
 	if (intsr & SPDIFRX_INT_PE) {
@@ -585,8 +599,12 @@ static irqreturn_t rk_spdifrx_isr(int irq, void *dev_id)
 	}
 
 	if (intsr & SPDIFRX_INT_RXO) {
-		dev_warn(spdifrx->dev, "FIFO overrun error\n");
-		xrun_err = true;
+		if (ignore_initial_error) {
+			dev_warn(spdifrx->dev, "FIFO overrun error (ignored!)\n");
+		} else {
+			dev_warn(spdifrx->dev, "FIFO overrun error\n");
+			xrun_err = true;
+		}
 	}
 
 	/* clear all handled interrupts */
