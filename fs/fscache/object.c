@@ -798,8 +798,6 @@ void fscache_object_destroy(struct fscache_object *object)
 }
 EXPORT_SYMBOL(fscache_object_destroy);
 
-static DECLARE_WAIT_QUEUE_HEAD(fscache_object_cong_wait);
-
 /*
  * enqueue an object for metadata-type processing
  */
@@ -808,12 +806,16 @@ void fscache_enqueue_object(struct fscache_object *object)
 	_enter("{OBJ%x}", object->debug_id);
 
 	if (fscache_get_object(object, fscache_obj_get_queue) >= 0) {
+		wait_queue_head_t *cong_wq =
+			&get_cpu_var(fscache_object_cong_wait);
 
 		if (queue_work(fscache_object_wq, &object->work)) {
 			if (fscache_object_congested())
-				wake_up(&fscache_object_cong_wait);
+				wake_up(cong_wq);
 		} else
 			fscache_put_object(object, fscache_obj_put_queue);
+
+		put_cpu_var(fscache_object_cong_wait);
 	}
 }
 
@@ -831,15 +833,16 @@ void fscache_enqueue_object(struct fscache_object *object)
  */
 bool fscache_object_sleep_till_congested(signed long *timeoutp)
 {
+	wait_queue_head_t *cong_wq = this_cpu_ptr(&fscache_object_cong_wait);
 	DEFINE_WAIT(wait);
 
 	if (fscache_object_congested())
 		return true;
 
-	add_wait_queue_exclusive(&fscache_object_cong_wait, &wait);
+	add_wait_queue_exclusive(cong_wq, &wait);
 	if (!fscache_object_congested())
 		*timeoutp = schedule_timeout(*timeoutp);
-	finish_wait(&fscache_object_cong_wait, &wait);
+	finish_wait(cong_wq, &wait);
 
 	return fscache_object_congested();
 }

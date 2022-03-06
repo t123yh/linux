@@ -333,8 +333,11 @@ int inet6_hash(struct sock *sk)
 {
 	int err = 0;
 
-	if (sk->sk_state != TCP_CLOSE)
+	if (sk->sk_state != TCP_CLOSE) {
+		local_bh_disable();
 		err = __inet_hash(sk, NULL);
+		local_bh_enable();
+	}
 
 	return err;
 }

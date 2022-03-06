@@ -47,12 +47,6 @@ static inline const char *printk_skip_headers(const char *buffer)
 
 #define CONSOLE_EXT_LOG_MAX	8192
 
-/*
- * The maximum size of a record formatted for console printing
- * (i.e. with the prefix prepended to every line).
- */
-#define CONSOLE_LOG_MAX		1024
-
 /* printk's without a loglevel use this.. */
 #define MESSAGE_LOGLEVEL_DEFAULT CONFIG_MESSAGE_LOGLEVEL_DEFAULT
 
@@ -161,7 +155,20 @@ int vprintk(const char *fmt, va_list args);
 asmlinkage __printf(1, 2) __cold
 int _printk(const char *fmt, ...);
 
-bool pr_flush(int timeout_ms, bool reset_on_progress);
+/*
+ * Special printk facility for scheduler/timekeeping use only, _DO_NOT_USE_ !
+ */
+__printf(1, 2) __cold int _printk_deferred(const char *fmt, ...);
+
+extern void __printk_safe_enter(void);
+extern void __printk_safe_exit(void);
+/*
+ * The printk_deferred_enter/exit macros are available only as a hack for
+ * some code paths that need to defer all printk console printing. Interrupts
+ * must be disabled for the deferred duration.
+ */
+#define printk_deferred_enter __printk_safe_enter
+#define printk_deferred_exit __printk_safe_exit
 
 /*
  * Please don't use printk_ratelimit(), because it shares ratelimiting state
@@ -203,10 +210,18 @@ int _printk(const char *s, ...)
 {
 	return 0;
 }
-
-static inline bool pr_flush(int timeout_ms, bool reset_on_progress)
+static inline __printf(1, 2) __cold
+int _printk_deferred(const char *s, ...)
 {
-	return true;
+	return 0;
+}
+
+static inline void printk_deferred_enter(void)
+{
+}
+
+static inline void printk_deferred_exit(void)
+{
 }
 
 static inline int printk_ratelimit(void)
@@ -269,30 +284,17 @@ static inline void printk_trigger_flush(void)
 extern int __printk_cpu_trylock(void);
 extern void __printk_wait_on_cpu_lock(void);
 extern void __printk_cpu_unlock(void);
-extern bool kgdb_roundup_delay(unsigned int cpu);
-
-#else
-
-#define __printk_cpu_trylock()		1
-#define __printk_wait_on_cpu_lock()
-#define __printk_cpu_unlock()
-
-static inline bool kgdb_roundup_delay(unsigned int cpu)
-{
-	return false;
-}
-#endif /* CONFIG_SMP */
 
 /**
- * raw_printk_cpu_lock_irqsave() - Acquire the printk cpu-reentrant spinning
- *                                 lock and disable interrupts.
+ * printk_cpu_lock_irqsave() - Acquire the printk cpu-reentrant spinning
+ *                             lock and disable interrupts.
  * @flags: Stack-allocated storage for saving local interrupt state,
- *         to be passed to raw_printk_cpu_unlock_irqrestore().
+ *         to be passed to printk_cpu_unlock_irqrestore().
  *
  * If the lock is owned by another CPU, spin until it becomes available.
  * Interrupts are restored while spinning.
  */
-#define raw_printk_cpu_lock_irqsave(flags)	\
+#define printk_cpu_lock_irqsave(flags)		\
 	for (;;) {				\
 		local_irq_save(flags);		\
 		if (__printk_cpu_trylock())	\
@@ -302,30 +304,22 @@ static inline bool kgdb_roundup_delay(unsigned int cpu)
 	}
 
 /**
- * raw_printk_cpu_unlock_irqrestore() - Release the printk cpu-reentrant
- *                                      spinning lock and restore interrupts.
- * @flags: Caller's saved interrupt state from raw_printk_cpu_lock_irqsave().
+ * printk_cpu_unlock_irqrestore() - Release the printk cpu-reentrant spinning
+ *                                  lock and restore interrupts.
+ * @flags: Caller's saved interrupt state, from printk_cpu_lock_irqsave().
  */
-#define raw_printk_cpu_unlock_irqrestore(flags)	\
+#define printk_cpu_unlock_irqrestore(flags)	\
 	do {					\
 		__printk_cpu_unlock();		\
 		local_irq_restore(flags);	\
-	} while (0)
+	} while (0)				\
 
-/*
- * Used to synchronize atomic consoles.
- *
- * The same as raw_printk_cpu_lock_irqsave() except that hardware interrupts
- * are _not_ restored while spinning.
- */
-#define console_atomic_lock(flags)		\
-	do {					\
-		local_irq_save(flags);		\
-		while (!__printk_cpu_trylock())	\
-			cpu_relax();		\
-	} while (0)
+#else
 
-#define console_atomic_unlock raw_printk_cpu_unlock_irqrestore
+#define printk_cpu_lock_irqsave(flags) ((void)flags)
+#define printk_cpu_unlock_irqrestore(flags) ((void)flags)
+
+#endif /* CONFIG_SMP */
 
 extern int kptr_restrict;
 
@@ -454,6 +448,8 @@ struct pi_entry {
  * See the vsnprintf() documentation for format string extensions over C99.
  */
 #define printk(fmt, ...) printk_index_wrap(_printk, fmt, ##__VA_ARGS__)
+#define printk_deferred(fmt, ...)					\
+	printk_index_wrap(_printk_deferred, fmt, ##__VA_ARGS__)
 
 /**
  * pr_emerg - Print an emergency-level message
@@ -591,8 +587,12 @@ struct pi_entry {
 #ifdef CONFIG_PRINTK
 #define printk_once(fmt, ...)					\
 	DO_ONCE_LITE(printk, fmt, ##__VA_ARGS__)
+#define printk_deferred_once(fmt, ...)				\
+	DO_ONCE_LITE(printk_deferred, fmt, ##__VA_ARGS__)
 #else
 #define printk_once(fmt, ...)					\
+	no_printk(fmt, ##__VA_ARGS__)
+#define printk_deferred_once(fmt, ...)				\
 	no_printk(fmt, ##__VA_ARGS__)
 #endif
 
