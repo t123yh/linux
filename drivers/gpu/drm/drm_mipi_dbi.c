@@ -1182,6 +1182,15 @@ int mipi_dbi_spi_transfer(struct spi_device *spi, u32 speed_hz,
 	struct spi_message m;
 	size_t chunk;
 	int ret;
+	int w_size;
+
+	if (bpw <= 8)
+		w_size = 1;
+	else if (bpw <= 16)
+		w_size = 2;
+	else
+		w_size = 4;
+	max_chunk -= (max_chunk % w_size);
 
 	spi_message_init_with_transfers(&m, &tr, 1);
 
