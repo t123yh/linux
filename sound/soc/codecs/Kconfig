@@ -75,6 +75,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_CS43130
 	imply SND_SOC_CS4341
 	imply SND_SOC_CS4349
+	imply SND_SOC_CS8416
 	imply SND_SOC_CS47L15
 	imply SND_SOC_CS47L24
 	imply SND_SOC_CS47L35
@@ -686,6 +687,10 @@ config SND_SOC_CS4341
 # Cirrus Logic CS4349 HiFi DAC
 config SND_SOC_CS4349
 	tristate "Cirrus Logic CS4349 CODEC"
+	depends on I2C
+
+config SND_SOC_CS8416
+	tristate "Cirrus Logic CS8416 Digital Audio Interface Receiver"
 	depends on I2C
 
 config SND_SOC_CS47L15
