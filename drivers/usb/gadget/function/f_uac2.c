@@ -108,7 +108,7 @@ enum {
 
 static struct usb_string strings_fn[] = {
 	/* [STR_ASSOC].s = DYNAMIC, */
-	[STR_IF_CTRL].s = "Topology Control",
+	/* [STR_IF_CTRL].s = DYNAMIC, */
 	[STR_CLKSRC_IN].s = "Input Clock",
 	[STR_CLKSRC_OUT].s = "Output Clock",
 	[STR_USB_IT].s = "USBH Out",
@@ -985,6 +985,7 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 		return ret;
 
 	strings_fn[STR_ASSOC].s = uac2_opts->function_name;
+	strings_fn[STR_IF_CTRL].s = uac2_opts->function_name;
 
 	us = usb_gstrings_attach(cdev, fn_strings, ARRAY_SIZE(strings_fn));
 	if (IS_ERR(us))
@@ -1011,10 +1012,6 @@ afunc_bind(struct usb_configuration *cfg, struct usb_function *fn)
 	io_in_it_desc.iTerminal = us[STR_IO_IT].id;
 	usb_in_ot_desc.iTerminal = us[STR_USB_OT].id;
 	io_out_ot_desc.iTerminal = us[STR_IO_OT].id;
-	std_as_out_if0_desc.iInterface = us[STR_AS_OUT_ALT0].id;
-	std_as_out_if1_desc.iInterface = us[STR_AS_OUT_ALT1].id;
-	std_as_in_if0_desc.iInterface = us[STR_AS_IN_ALT0].id;
-	std_as_in_if1_desc.iInterface = us[STR_AS_IN_ALT1].id;
 
 	if (FUOUT_EN(uac2_opts)) {
 		u8 *i_feature = (u8 *)out_feature_unit_desc +
