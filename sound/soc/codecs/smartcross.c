@@ -262,6 +262,11 @@ static int smartcross_dac_probe(struct platform_device *pdev)
 			continue;
 		}
 
+		if (smartcross_pcm5242_initialize_driver(pdev, &dai_drivers[i], i) >= 0) {
+			cnt++;
+			continue;
+		}
+
 		ret = smartcross_null_initialize_driver(pdev, &dai_drivers[i], i);
 		if (ret < 0)
 			goto fail_i2c;

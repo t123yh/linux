@@ -219,12 +219,10 @@ int smartcross_pcm1792a_initialize_driver(struct platform_device* pdev, struct s
 		return -ENODEV;
 	}
 
-	/*
 	if (data.byte != 0x5A) {
-		dev_warn(&pdev->dev, "An unknown device sits on i2c@%x\n", addr);
+		dev_warn(&pdev->dev, "An unknown device (not pcm1792a) sits on i2c@%x\n", addr);
 		return -ENODEV;
 	}
-	*/
 
 	driver->id = idx;
 	driver->name = devm_kasprintf(&pdev->dev, GFP_KERNEL, "PCM1792a@%d", idx);

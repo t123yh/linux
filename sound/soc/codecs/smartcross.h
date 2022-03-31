@@ -7,6 +7,8 @@
 #define NUMBER_OF_CHIPS 4
 /* A somewhat hacky solution to adjust volume */
 #define SMARTCROSS_TRIGGER_VOLUME		1000
+#define SMARTCROSS_TRIGGER_SUSPEND		1001
+#define SMARTCROSS_TRIGGER_RESUME		1002
 #define VOL_MAX 255U
 
 
@@ -23,6 +25,7 @@ int smartcross_null_initialize_driver(struct platform_device* pdev, struct snd_s
 int smartcross_ma120x0p_initialize_driver(struct platform_device* pdev, struct snd_soc_dai_driver* driver, int idx);
 int smartcross_cs4398_initialize_driver(struct platform_device* pdev, struct snd_soc_dai_driver* driver, int idx);
 int smartcross_pcm1792a_initialize_driver(struct platform_device* pdev, struct snd_soc_dai_driver* driver, int idx);
+int smartcross_pcm5242_initialize_driver(struct platform_device* pdev, struct snd_soc_dai_driver* driver, int idx);
 
 struct smartcross_dac_priv {
 	struct i2c_adapter* adapter;
