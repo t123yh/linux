@@ -2228,5 +2228,13 @@ config MFD_RSMU_SPI
 	  Additional drivers must be enabled in order to use the functionality
 	  of the device.
 
+config MFD_SMARTCROSS_FPCTL
+	bool "SmartCross Front Panel Controller"
+	depends on I2C && OF
+	depends on RC_CORE
+	help
+	  Support for SmartCross Front Panel controller
+
+
 endmenu
 endif
