@@ -2232,6 +2232,7 @@ config MFD_SMARTCROSS_FPCTL
 	bool "SmartCross Front Panel Controller"
 	depends on I2C && OF
 	depends on RC_CORE
+	depends on BACKLIGHT_CLASS_DEVICE
 	help
 	  Support for SmartCross Front Panel controller
 

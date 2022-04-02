@@ -15,6 +15,7 @@
 #include <linux/i2c.h>
 #include <linux/of_device.h>
 #include <linux/regmap.h>
+#include <linux/backlight.h>
 #include <media/rc-core.h>
 
 #define DRIVER_NAME "smartcross-fpctl"
@@ -24,10 +25,12 @@ struct smartcross_fpctl_priv {
 	struct gpio_desc *irq;
     struct device *dev;
 	struct rc_dev *rc_dev;
+	struct backlight_device *backlight;
 };
 
 #define FPCTL_REG_INT_ENABLE 0
 #define FPCTL_REG_INT_ACK 1
+#define FPCTL_BL 2
 #define FPCTL_REG_ID 32
 #define FPCTL_REG_INT_STATUS 33
 #define FPCTL_REG_IR_RX0 34
@@ -39,7 +42,32 @@ struct smartcross_fpctl_priv {
 #define FPCTL_INT_IR_RECEIVED (1 << FPCTL_INT_IR_RECEIVED_SHIFT)
 #define FPCTL_INT_IR_REPEAT_SHIFT 1
 #define FPCTL_INT_IR_REPEAT (1 << FPCTL_INT_IR_REPEAT_SHIFT)
- 
+
+static int smartcross_bl_get_brightness(struct backlight_device *bl)
+{
+	struct smartcross_fpctl_priv *priv_data = bl_get_data(bl);
+	int ret, val;
+	ret = regmap_read(priv_data->regmap, FPCTL_BL, &val);
+	if (ret < 0) {
+		dev_err(priv_data->dev, "Failed to read brightness: %d\n", ret);
+		return ret;
+	}
+	return val;
+}
+
+static int smartcross_bl_update_status(struct backlight_device *bl)
+{
+	struct smartcross_fpctl_priv *priv_data = bl_get_data(bl);
+	int brightness = backlight_get_brightness(bl);
+
+	return regmap_write(priv_data->regmap, FPCTL_BL, brightness);
+}
+
+static const struct backlight_ops smartcross_bl_ops = {
+	.update_status = smartcross_bl_update_status,
+	.get_brightness = smartcross_bl_get_brightness,
+};
+
 static inline bool is_rev(uint8_t a, uint8_t b) {
 	return a == (uint8_t)~b;
 }
@@ -74,7 +102,7 @@ static irqreturn_t smartcross_fpctl_irq(int irq_no, void *handle) {
 static bool smartcross_fpctl_readable_register(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
-	case 0 ... 1:
+	case 0 ... 2:
     case 32 ... 37:
 		return true;
 	default:
@@ -85,7 +113,7 @@ static bool smartcross_fpctl_readable_register(struct device *dev, unsigned int 
 static bool smartcross_fpctl_writeable_register(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
-	case 0 ... 1:
+	case 0 ... 2:
 		return true;
 	default:
 		return false;
@@ -117,6 +145,7 @@ static int smartcross_fpctl_i2c_probe(struct i2c_client *client,
 			   const struct i2c_device_id *id)
 {
 	struct smartcross_fpctl_priv *priv_data;
+	struct backlight_properties props;
 	int ret = 0, val;
 
 	priv_data = devm_kzalloc(&client->dev, sizeof(struct smartcross_fpctl_priv), GFP_KERNEL);
@@ -170,6 +199,20 @@ static int smartcross_fpctl_i2c_probe(struct i2c_client *client,
 	if (ret < 0) {
 		dev_err(&client->dev, "1Failed to register RC device: %d\n", ret);
         return -EINVAL;
+	}
+
+	memset(&props, 0, sizeof(struct backlight_properties));
+	props.type = BACKLIGHT_RAW;
+	props.brightness = 0;
+	props.max_brightness = 16;
+
+	priv_data->backlight = devm_backlight_device_register(&client->dev, "smartcross-backlight",
+				    &client->dev, priv_data,
+				    &smartcross_bl_ops, &props);
+	if (IS_ERR(priv_data->backlight)) {
+		ret = PTR_ERR(priv_data->backlight);
+		dev_err(&client->dev, "Failed to register backlight: %d\n", ret);
+		return ret;
 	}
 
     regmap_write(priv_data->regmap, FPCTL_REG_INT_ACK, 0xFF);
