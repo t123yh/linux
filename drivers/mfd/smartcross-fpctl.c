@@ -26,6 +26,8 @@ struct smartcross_fpctl_priv {
     struct device *dev;
 	struct rc_dev *rc_dev;
 	struct backlight_device *backlight;
+	struct input_dev *rotary;
+	int16_t rotary_last_pos;
 };
 
 #define FPCTL_REG_INT_ENABLE 0
@@ -37,11 +39,15 @@ struct smartcross_fpctl_priv {
 #define FPCTL_REG_IR_RX1 35
 #define FPCTL_REG_IR_RX2 36
 #define FPCTL_REG_IR_RX3 37
+#define FPCTL_REG_ROT_LOW 38
+#define FPCTL_REG_ROT_HIGH 39
 
 #define FPCTL_INT_IR_RECEIVED_SHIFT 0
 #define FPCTL_INT_IR_RECEIVED (1 << FPCTL_INT_IR_RECEIVED_SHIFT)
 #define FPCTL_INT_IR_REPEAT_SHIFT 1
 #define FPCTL_INT_IR_REPEAT (1 << FPCTL_INT_IR_REPEAT_SHIFT)
+#define FPCTL_INT_ROTARY_SHIFT 2
+#define FPCTL_INT_ROTARY (1 << FPCTL_INT_ROTARY_SHIFT)
 
 static int smartcross_bl_get_brightness(struct backlight_device *bl)
 {
@@ -93,6 +99,14 @@ static irqreturn_t smartcross_fpctl_irq(int irq_no, void *handle) {
         dev_dbg(priv_data->dev, "IR Repeat\n");
 		rc_repeat(priv_data->rc_dev);
     }
+	if (irq & FPCTL_INT_ROTARY) {
+		int16_t pos, delta;
+		regmap_bulk_read(priv_data->regmap, FPCTL_REG_ROT_LOW, &pos, 2);
+		delta = pos - priv_data->rotary_last_pos;
+		input_report_rel(priv_data->rotary, REL_X, delta);
+		input_sync(priv_data->rotary);
+		priv_data->rotary_last_pos = pos;
+	}
 
     regmap_write(priv_data->regmap, FPCTL_REG_INT_ACK, irq);
 
@@ -103,7 +117,7 @@ static bool smartcross_fpctl_readable_register(struct device *dev, unsigned int 
 {
 	switch (reg) {
 	case 0 ... 2:
-    case 32 ... 37:
+    case 32 ... 39:
 		return true;
 	default:
 		return false;
@@ -123,7 +137,7 @@ static bool smartcross_fpctl_writeable_register(struct device *dev, unsigned int
 static bool smartcross_fpctl_volatile_register(struct device* dev, unsigned int reg)
 {
 	switch (reg) {
-	case 33 ... 37:
+	case 33 ... 39:
 		return true;
 	default:
 		return false;
@@ -134,7 +148,7 @@ static const struct regmap_config smartcross_fpctl_regmap = {
 	.reg_bits		= 8,
 	.val_bits		= 8,
 
-	.max_register		= FPCTL_REG_IR_RX3,
+	.max_register		= 39,
 	.readable_reg		= smartcross_fpctl_readable_register,
 	.writeable_reg		= smartcross_fpctl_writeable_register,
 	.volatile_reg       = smartcross_fpctl_volatile_register,
@@ -146,6 +160,7 @@ static int smartcross_fpctl_i2c_probe(struct i2c_client *client,
 {
 	struct smartcross_fpctl_priv *priv_data;
 	struct backlight_properties props;
+	char* name;
 	int ret = 0, val;
 
 	priv_data = devm_kzalloc(&client->dev, sizeof(struct smartcross_fpctl_priv), GFP_KERNEL);
@@ -191,13 +206,16 @@ static int smartcross_fpctl_i2c_probe(struct i2c_client *client,
 	priv_data->rc_dev->allowed_protocols = RC_PROTO_BIT_NECX | RC_PROTO_BIT_NEC;
 	priv_data->rc_dev->input_phys = DRIVER_NAME "/input-rc";
 	priv_data->rc_dev->driver_name = DRIVER_NAME;
-	priv_data->rc_dev->device_name = dev_name(&client->dev);
+#define NAME_LEN 20
+	name = devm_kmalloc(&client->dev, NAME_LEN, GFP_KERNEL);
+	snprintf(name, NAME_LEN, "ir@i2c%s", dev_name(&client->dev));
+	priv_data->rc_dev->device_name = name;
 	priv_data->rc_dev->input_id.bustype = BUS_I2C;
 	priv_data->rc_dev->input_id.version = 1;
 
 	ret = devm_rc_register_device(&client->dev, priv_data->rc_dev);
 	if (ret < 0) {
-		dev_err(&client->dev, "1Failed to register RC device: %d\n", ret);
+		dev_err(&client->dev, "Failed to register RC device: %d\n", ret);
         return -EINVAL;
 	}
 
@@ -215,8 +233,28 @@ static int smartcross_fpctl_i2c_probe(struct i2c_client *client,
 		return ret;
 	}
 
+	priv_data->rotary = devm_input_allocate_device(&client->dev);
+	if (IS_ERR(priv_data->rotary)) {
+		ret = PTR_ERR(priv_data->rotary);
+		dev_err(&client->dev, "Failed to allocate rotary encoder: %d\n", ret);
+		return ret;
+	}
+
+	name = devm_kmalloc(&client->dev, NAME_LEN, GFP_KERNEL);
+	snprintf(name, NAME_LEN, "rotary@i2c%s", dev_name(&client->dev));
+	priv_data->rotary->name = name;
+	priv_data->rotary->id.bustype = BUS_I2C;
+	input_set_capability(priv_data->rotary, EV_REL, REL_X);
+
+	ret = input_register_device(priv_data->rotary);
+	if (ret) {
+		dev_err(&client->dev, "Failed to register rotary encoder device: %d\n", ret);
+		return ret;
+	}
+	
+	regmap_bulk_read(priv_data->regmap, FPCTL_REG_ROT_LOW, &priv_data->rotary_last_pos, 2);
     regmap_write(priv_data->regmap, FPCTL_REG_INT_ACK, 0xFF);
-    regmap_write(priv_data->regmap, FPCTL_REG_INT_ENABLE, FPCTL_INT_IR_RECEIVED | FPCTL_INT_IR_REPEAT);
+    regmap_write(priv_data->regmap, FPCTL_REG_INT_ENABLE, FPCTL_INT_IR_RECEIVED | FPCTL_INT_IR_REPEAT | FPCTL_INT_ROTARY);
 
 	ret = devm_request_threaded_irq(&client->dev, gpiod_to_irq(priv_data->irq),
 					NULL, smartcross_fpctl_irq,
