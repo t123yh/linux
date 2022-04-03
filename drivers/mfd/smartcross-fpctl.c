@@ -203,7 +203,7 @@ static int smartcross_fpctl_i2c_probe(struct i2c_client *client,
 
 	memset(&props, 0, sizeof(struct backlight_properties));
 	props.type = BACKLIGHT_RAW;
-	props.brightness = 0;
+	props.brightness = 8;
 	props.max_brightness = 16;
 
 	priv_data->backlight = devm_backlight_device_register(&client->dev, "smartcross-backlight",
