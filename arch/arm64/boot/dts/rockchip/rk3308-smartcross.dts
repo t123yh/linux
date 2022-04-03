@@ -13,12 +13,12 @@
 	model = "SmartCross System";
 	compatible = "t123yh,smartcross", "rockchip,rk3308";
 	chosen {
-		stdout-path = "serial0:1500000n8";
+		stdout-path = "serial2:1500000n8";
 	};
 
 	aliases {
 		mmc0 = &emmc;
-		serial0 = &uart0;
+		serial2 = &uart2;
 	};
 
 	vdd_core: vdd-core {
@@ -32,6 +32,15 @@
 		regulator-boot-on;
 		regulator-settling-time-up-us = <250>;
 		status = "okay";
+	};
+
+	vcc_io: vcc-io {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_3v3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+		regulator-boot-on;
 	};
 
 	vcc_host_vbus: host-vbus-regulator {
@@ -111,18 +120,19 @@
 		status = "okay";
 		compatible = "simple-audio-card";
 		simple-audio-card,name = "SPDIFReceiver";
+		simple-audio-card,format = "i2s";
+        simple-audio-card,bitclock-master = <&spdif_input>;
+        simple-audio-card,frame-master = <&spdif_input>;
+
 		simple-audio-card,cpu {
-			sound-dai = <&spdif_rx>;
+			sound-dai = <&i2s_2ch_0>;
 		};
 		simple-audio-card,codec {
-			sound-dai = <&spdif_dummy_in>;
+			sound-dai = <&spdif_input>;
 		};
 	};
-	
-	spdif_dummy_in: spdif-dummy-in {
-		#sound-dai-cells = <0>;
-		compatible = "linux,spdif-dir";
-	};
+
+
 
 	smartcross_dac: smartcross-dac {
 		#sound-dai-cells = <1>;
@@ -150,6 +160,13 @@
 			rockchip,pins =
 				<2 RK_PB7 0 &pcfg_pull_none_8ma>,
 				<2 RK_PC0 0 &pcfg_pull_none_8ma>;
+		};
+	};
+
+	display-pins {
+		display_pin_ctrl: display-pin-ctrl {
+			// DC pin
+			rockchip,pins = <2 RK_PA0 0 &pcfg_pull_none_8ma>;
 		};
 	};
 };
@@ -200,11 +217,37 @@
 	};
 };
 
+&i2c1 {
+	status = "okay";
+
+	spdif_input: cs8416@13 {
+		#sound-dai-cells = <0>;
+		reg = <0x13>;
+		compatible = "cirrus,cs8416";
+		reset-gpios = <&gpio4 RK_PD1 GPIO_ACTIVE_HIGH>;
+		irq-gpios = <&gpio4 RK_PD0 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&cs8416_pins>;
+		cirrus,gpio1-sel = <0x2>; // interrupt
+		clocks = <&i2s_mclk>;
+		clock-names = "omck";
+	};
+
+	frontpanel: fpctrl@22 {
+		#sound-dai-cells = <0>;
+		reg = <0x22>;
+		compatible = "smartcross,fpctl-v1";
+		irq-gpios = <&gpio0 RK_PC0 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&fpctl_irq_pin>;
+	};
+};
+
 &cpu0 {
 	cpu-supply = <&vdd_core>;
 };
 
-&spdif_rx {
+&i2s_2ch_0 {
 	#sound-dai-cells = <0>;
 	status = "okay";
 };
@@ -226,6 +269,18 @@
 	usb {
 		host_vbus_drv: host-vbus-drv {
 			rockchip,pins = <0 RK_PC5 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
+
+	spdifrx-pins {
+		cs8416_pins: cs8416-pins {
+			rockchip,pins = <4 RK_PD1 RK_FUNC_GPIO &pcfg_pull_down>, <4 RK_PD0 RK_FUNC_GPIO &pcfg_pull_down>;
+		};
+	};
+
+	fpctl-pins {
+		fpctl_irq_pin: fpctl-pins {
+			rockchip,pins = <0 RK_PC0 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
 	};
 };
@@ -262,10 +317,27 @@
 	status = "okay";
 };
 
-&uart0 {
+&uart2 {
         status = "okay";
         pinctrl-names = "default";
-        pinctrl-0 = <&uart0_xfer>;
+        pinctrl-0 = <&uart2m1_xfer>;
+};
+
+&spi0 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi0_clk &spi0_csn0 &spi0_mosi>;
+
+	spi-display@0{
+		compatible = "smartcross,spi-lcd";
+		reg = <0>;
+		spi-max-frequency = <60000000>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&display_pin_ctrl>;
+		dc-gpios = <&gpio2 RK_PA0 GPIO_ACTIVE_HIGH>;
+		rotation = <90>;
+		backlight = <&frontpanel>;
+	};
 };
 
 &wdt {
