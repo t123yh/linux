@@ -16,6 +16,7 @@
 #include <linux/of_device.h>
 #include <linux/regmap.h>
 #include <linux/backlight.h>
+#include <linux/led-class-multicolor.h>
 #include <media/rc-core.h>
 
 #define DRIVER_NAME "smartcross-fpctl"
@@ -28,11 +29,17 @@ struct smartcross_fpctl_priv {
 	struct backlight_device *backlight;
 	struct input_dev *rotary;
 	int16_t rotary_last_pos;
+	struct mc_subled subled_info[3];
+	struct led_classdev_mc mcled_cdev;
 };
 
 #define FPCTL_REG_INT_ENABLE 0
 #define FPCTL_REG_INT_ACK 1
 #define FPCTL_BL 2
+#define FPCTL_R 3
+#define FPCTL_G 4
+#define FPCTL_B 5
+
 #define FPCTL_REG_ID 32
 #define FPCTL_REG_INT_STATUS 33
 #define FPCTL_REG_IR_RX0 34
@@ -73,6 +80,21 @@ static const struct backlight_ops smartcross_bl_ops = {
 	.update_status = smartcross_bl_update_status,
 	.get_brightness = smartcross_bl_get_brightness,
 };
+
+static int smartcross_fpled_brightness_set(struct led_classdev *cdev,
+				     enum led_brightness brightness)
+{
+	struct led_classdev_mc *mc_cdev = lcdev_to_mccdev(cdev);
+	struct smartcross_fpctl_priv *priv_data = container_of(mc_cdev, 
+		struct smartcross_fpctl_priv, mcled_cdev);
+	uint8_t dat[3], i;
+
+	led_mc_calc_color_components(mc_cdev, brightness);
+	for (i = 0; i < sizeof(dat); i++)
+		dat[i] = mc_cdev->subled_info[i].brightness;
+
+	return regmap_bulk_write(priv_data->regmap, FPCTL_R, dat, sizeof(dat));
+}
 
 static inline bool is_rev(uint8_t a, uint8_t b) {
 	return a == (uint8_t)~b;
@@ -116,7 +138,7 @@ static irqreturn_t smartcross_fpctl_irq(int irq_no, void *handle) {
 static bool smartcross_fpctl_readable_register(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
-	case 0 ... 2:
+	case 0 ... 5:
     case 32 ... 39:
 		return true;
 	default:
@@ -127,7 +149,7 @@ static bool smartcross_fpctl_readable_register(struct device *dev, unsigned int 
 static bool smartcross_fpctl_writeable_register(struct device *dev, unsigned int reg)
 {
 	switch (reg) {
-	case 0 ... 2:
+	case 0 ... 5:
 		return true;
 	default:
 		return false;
@@ -162,6 +184,10 @@ static int smartcross_fpctl_i2c_probe(struct i2c_client *client,
 	struct backlight_properties props;
 	char* name;
 	int ret = 0, val;
+	struct led_init_data ws2812_init_data = {
+		.default_label = "ws2812",
+		.devicename = dev_name(&client->dev)
+	};
 
 	priv_data = devm_kzalloc(&client->dev, sizeof(struct smartcross_fpctl_priv), GFP_KERNEL);
 	if (!priv_data)
@@ -251,6 +277,23 @@ static int smartcross_fpctl_i2c_probe(struct i2c_client *client,
 		dev_err(&client->dev, "Failed to register rotary encoder device: %d\n", ret);
 		return ret;
 	}
+
+	priv_data->subled_info[0].color_index = LED_COLOR_ID_RED;
+	priv_data->subled_info[0].channel = 0;
+	priv_data->subled_info[1].color_index = LED_COLOR_ID_GREEN;
+	priv_data->subled_info[1].channel = 1;
+	priv_data->subled_info[2].color_index = LED_COLOR_ID_BLUE;
+	priv_data->subled_info[2].channel = 2;
+	priv_data->mcled_cdev.subled_info = priv_data->subled_info;
+	priv_data->mcled_cdev.num_colors = ARRAY_SIZE(priv_data->subled_info);
+	priv_data->mcled_cdev.led_cdev.max_brightness = 255;
+	priv_data->mcled_cdev.led_cdev.brightness_set_blocking = smartcross_fpled_brightness_set;
+	ret = devm_led_classdev_multicolor_register_ext(&client->dev, &priv_data->mcled_cdev,
+							&ws2812_init_data);
+	if (ret) {
+		dev_err(&client->dev, "Failed to register LED device: %d\n", ret);
+		return ret;
+	}
 	
 	regmap_bulk_read(priv_data->regmap, FPCTL_REG_ROT_LOW, &priv_data->rotary_last_pos, 2);
     regmap_write(priv_data->regmap, FPCTL_REG_INT_ACK, 0xFF);
@@ -267,6 +310,19 @@ static int smartcross_fpctl_i2c_probe(struct i2c_client *client,
 
 	dev_info(&client->dev, "SmartCross front panel controller initialized\n");
 
+	return 0;
+}
+
+void smartcross_fpctl_i2c_shutdown(struct i2c_client *client) {
+	struct smartcross_fpctl_priv *priv_data = dev_get_drvdata(&client->dev);
+	uint8_t data[4] = {0,0,0,0};
+
+	// disable all LED and backlight
+	regmap_bulk_write(priv_data->regmap, FPCTL_BL, data, sizeof(data));
+}
+
+int smartcross_fpctl_i2c_remove(struct i2c_client *client) {
+	smartcross_fpctl_i2c_shutdown(client);
 	return 0;
 }
 
@@ -291,6 +347,8 @@ static struct i2c_driver smartcross_fpctl_i2c_driver = {
 	},
 	.id_table	= smartcross_fpctl_i2c_id,
 	.probe		= smartcross_fpctl_i2c_probe,
+	.remove   = smartcross_fpctl_i2c_remove,
+	.shutdown   = smartcross_fpctl_i2c_shutdown
 };
 
 module_i2c_driver(smartcross_fpctl_i2c_driver);
