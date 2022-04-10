@@ -26,18 +26,13 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_mipi_dbi.h>
 
-#define MADCTL_MY	BIT(7)
-#define MADCTL_MX	BIT(6)
-#define MADCTL_MV	BIT(5)
-#define MADCTL_RGB	BIT(3)
-
 struct smartcross_lcd_priv {
-	struct mipi_dbi_dev dbidev;	/* Must be first for .release() */
+	struct mipi_dbi_dev dbidev; /* Must be first for .release() */
 };
 
 static void smartcross_lcd_pipe_enable(struct drm_simple_display_pipe *pipe,
-				struct drm_crtc_state *crtc_state,
-				struct drm_plane_state *plane_state)
+				       struct drm_crtc_state *crtc_state,
+				       struct drm_plane_state *plane_state)
 {
 	struct mipi_dbi_dev *dbidev = drm_to_mipi_dbi_dev(pipe->crtc.dev);
 	struct mipi_dbi *dbi = &dbidev->dbi;
@@ -48,70 +43,87 @@ static void smartcross_lcd_pipe_enable(struct drm_simple_display_pipe *pipe,
 		return;
 
 	DRM_DEBUG_KMS("\n");
+
 	switch (dbidev->rotation) {
 	default:
 		addr_mode = 0;
-	    dbidev->left_offset = 34;
-        dbidev->top_offset = 0;
+		dbidev->left_offset = 34;
+		dbidev->top_offset = 0;
 		break;
 	case 180:
 		addr_mode = 0xC0;
-        dbidev->left_offset = 34;
-        dbidev->top_offset = 0;
+		dbidev->left_offset = 34;
+		dbidev->top_offset = 0;
 		break;
 	case 90:
 		addr_mode = 0x70;
-        dbidev->left_offset = 0;
-        dbidev->top_offset = 34;
+		dbidev->left_offset = 0;
+		dbidev->top_offset = 34;
 		break;
 	case 270:
 		addr_mode = 0xA0;
-        dbidev->left_offset = 0;
-        dbidev->top_offset = 34;
+		dbidev->left_offset = 0;
+		dbidev->top_offset = 34;
 		break;
 	}
 
+	mipi_dbi_command(dbi, 0x01);
+	msleep(120);
+	mipi_dbi_command(dbi, 0x21);
+	mipi_dbi_command(dbi, 0x3A);
 	mipi_dbi_command(dbi, MIPI_DCS_SET_ADDRESS_MODE, addr_mode);
-
-    mipi_dbi_command(dbi, MIPI_DCS_EXIT_SLEEP_MODE);
+	mipi_dbi_command(dbi, MIPI_DCS_SET_PIXEL_FORMAT, 0x05);
+	mipi_dbi_command(dbi, 0xB2, 0x0C, 0x0C, 0x00, 0x33, 0x33);
+	mipi_dbi_command(dbi, 0xB7, 0x35);
+	mipi_dbi_command(dbi, 0xBB, 0x35);
+	mipi_dbi_command(dbi, 0xC0, 0x2C);
+	mipi_dbi_command(dbi, 0xC2, 0x01);
+	mipi_dbi_command(dbi, 0xC3, 0x13);
+	mipi_dbi_command(dbi, 0xC4, 0x20);
+	mipi_dbi_command(dbi, 0xC6, 0x0F);
+	mipi_dbi_command(dbi, 0xD0, 0xA4, 0xA1);
+	mipi_dbi_command(dbi, 0xD6, 0xA1);
+	mipi_dbi_command(dbi, 0xE0, 0xF0, 0x00, 0x04, 0x04, 0x04, 0x05, 0x29,
+			 0x33, 0x3E, 0x38, 0x12, 0x12, 0x28, 0x30);
+	mipi_dbi_command(dbi, 0xE1, 0xF0, 0x07, 0x0A, 0x0D, 0x0B, 0x07, 0x28,
+			 0x33, 0x3E, 0x36, 0x14, 0x14, 0x29, 0x32);
+	mipi_dbi_command(dbi, MIPI_DCS_EXIT_SLEEP_MODE);
 	msleep(5);
-
-    mipi_dbi_enable_flush(dbidev, crtc_state, plane_state);
-
+	mipi_dbi_enable_flush(dbidev, crtc_state, plane_state);
 	mipi_dbi_command(dbi, MIPI_DCS_SET_DISPLAY_ON);
 
 	drm_dev_exit(idx);
 }
 
 static const struct drm_simple_display_pipe_funcs smartcross_lcd_pipe_funcs = {
-	.enable		= smartcross_lcd_pipe_enable,
-	.disable	= mipi_dbi_pipe_disable,
-	.update		= mipi_dbi_pipe_update,
+	.enable = smartcross_lcd_pipe_enable,
+	.disable = mipi_dbi_pipe_disable,
+	.update = mipi_dbi_pipe_update,
 };
 
 DEFINE_DRM_GEM_CMA_FOPS(smartcross_lcd_fops);
 
 static const struct drm_driver smartcross_lcd_driver = {
-	.driver_features	= DRIVER_GEM | DRIVER_MODESET | DRIVER_ATOMIC,
-	.fops			= &smartcross_lcd_fops,
+	.driver_features = DRIVER_GEM | DRIVER_MODESET | DRIVER_ATOMIC,
+	.fops = &smartcross_lcd_fops,
 	DRM_GEM_CMA_DRIVER_OPS_VMAP,
-	.debugfs_init		= mipi_dbi_debugfs_init,
-	.name			= "smartcross_lcd",
-	.desc			= "SmartCross Front Panel LCD Module",
-	.date			= "20220402",
-	.major			= 1,
-	.minor			= 0,
+	.debugfs_init = mipi_dbi_debugfs_init,
+	.name = "smartcross_lcd",
+	.desc = "SmartCross Front Panel LCD Module",
+	.date = "20220402",
+	.major = 1,
+	.minor = 0,
 };
 
 static const struct of_device_id smartcross_lcd_of_match[] = {
 	{ .compatible = "smartcross,spi-lcd" },
-	{ },
+	{},
 };
 MODULE_DEVICE_TABLE(of, smartcross_lcd_of_match);
 
 static const struct spi_device_id smartcross_lcd_id[] = {
 	{ "smartcross,spi-lcd" },
-	{ },
+	{},
 };
 MODULE_DEVICE_TABLE(spi, smartcross_lcd_id);
 
@@ -120,7 +132,7 @@ static int smartcross_lcd_probe(struct spi_device *spi)
 	struct device *dev = &spi->dev;
 	struct mipi_dbi_dev *dbidev;
 	struct smartcross_lcd_priv *priv;
-    struct drm_display_mode mode = { DRM_SIMPLE_MODE(172, 320, 19, 36) };
+	struct drm_display_mode mode = { DRM_SIMPLE_MODE(172, 320, 19, 36) };
 	struct drm_device *drm;
 	struct mipi_dbi *dbi;
 	struct gpio_desc *dc;
@@ -139,7 +151,8 @@ static int smartcross_lcd_probe(struct spi_device *spi)
 
 	dc = devm_gpiod_get(dev, "dc", GPIOD_OUT_LOW);
 	if (IS_ERR(dc))
-		return dev_err_probe(dev, PTR_ERR(dc), "Failed to get GPIO 'dc'\n");
+		return dev_err_probe(dev, PTR_ERR(dc),
+				     "Failed to get GPIO 'dc'\n");
 
 	dbidev->backlight = devm_of_find_backlight(dev);
 	if (IS_ERR(dbidev->backlight))
@@ -202,4 +215,3 @@ module_spi_driver(smartcross_lcd_spi_driver);
 MODULE_DESCRIPTION("SmartCross LCD DRM driver");
 MODULE_AUTHOR("Yunhao Tian <t123yh.xyz@gmail.com>");
 MODULE_LICENSE("GPL");
-
