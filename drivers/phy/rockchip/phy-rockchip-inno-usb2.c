@@ -535,6 +535,8 @@ static void rockchip_usb2phy_otg_sm_work(struct work_struct *work)
 	unsigned long delay;
 	bool vbus_attach, sch_work, notify_charger;
 
+	return;
+
 	vbus_attach = property_enabled(rphy->grf,
 				       &rport->port_cfg->utmi_bvalid);
 
@@ -692,6 +694,8 @@ static void rockchip_chg_detect_work(struct work_struct *work)
 	struct regmap *base = get_reg_base(rphy);
 	bool is_dcd, tmout, vout;
 	unsigned long delay;
+
+	return;
 
 	dev_dbg(&rport->phy->dev, "chg detection work state = %d\n",
 		rphy->chg_state);
