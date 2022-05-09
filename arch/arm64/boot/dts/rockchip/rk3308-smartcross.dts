@@ -121,13 +121,13 @@
 		compatible = "simple-audio-card";
 		simple-audio-card,name = "SPDIFReceiver";
 		simple-audio-card,format = "i2s";
-        simple-audio-card,bitclock-master = <&spdif_input>;
-        simple-audio-card,frame-master = <&spdif_input>;
+        simple-audio-card,bitclock-master = <&spdif_dai_codec>;
+        simple-audio-card,frame-master = <&spdif_dai_codec>;
 
-		simple-audio-card,cpu {
+		spdif_dai_cpu: simple-audio-card,cpu {
 			sound-dai = <&i2s_2ch_0>;
 		};
-		simple-audio-card,codec {
+		spdif_dai_codec: simple-audio-card,codec {
 			sound-dai = <&spdif_input>;
 		};
 	};
